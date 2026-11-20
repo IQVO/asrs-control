@@ -333,6 +333,11 @@ jobs:
       - uses: helm/chart-testing-action@720270857a28afd41e2426521a7801db09e9b510 # v2.9.0
       - name: Run chart-testing (lint)
         run: ct lint --charts charts/asrs-control --validate-maintainers=false --check-version-increment=false
+      - name: helm lint with each ci values file (standalone renders)
+        run: |
+          set -euo pipefail
+          helm lint charts/asrs-control -f charts/asrs-control/ci/default-values.yaml
+          helm lint charts/asrs-control -f charts/asrs-control/ci/all-components-values.yaml
 
   # ============================================================
   # CLASSIFICATION: PACKAGING (Helm chart tests)
