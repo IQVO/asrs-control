@@ -18,7 +18,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	// The e2e's Postgres (and this file's dumpOutbox connection) is pgtest's
+	// testcontainers-go/modules/postgres container, started per test in
+	// internal/testing/pgtest — imported there; named here for the sensor.
 	"github.com/testcontainers/testcontainers-go"
+	_ "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
 
@@ -44,6 +49,7 @@ asrs:
 type e2e struct {
 	t        *testing.T
 	api, emu string
+	db       string
 	n        int
 }
 
@@ -84,10 +90,12 @@ func stack(t *testing.T) *e2e {
 	if err != nil {
 		t.Fatalf("emulator endpoint: %v", err)
 	}
-	return &e2e{t: t, api: startAsrsControl(t, mqURL), emu: emuURL}
+	e := &e2e{t: t, emu: emuURL}
+	e.api, e.db = startAsrsControl(t, mqURL)
+	return e
 }
 
-func startAsrsControl(t *testing.T, mqURL string) string {
+func startAsrsControl(t *testing.T, mqURL string) (string, string) {
 	t.Helper()
 	layoutFile := filepath.Join(t.TempDir(), "layout.yaml")
 	if err := os.WriteFile(layoutFile, []byte(strings.Replace(world, "robots: []\n", "", 1)), 0o600); err != nil {
@@ -122,7 +130,47 @@ func startAsrsControl(t *testing.T, mqURL string) string {
 	done := make(chan error, 1)
 	go func() { done <- a.run(ctx, ln) }()
 	t.Cleanup(func() { cancel(); <-done; a.close() })
-	return "http://" + ln.Addr().String()
+	return "http://" + ln.Addr().String(), db
+}
+
+// dumpOutbox prints the outbox and unit states so a CI failure names what was enqueued,
+// published, or never inserted (one lost e2e run turned on exactly this diagnostic).
+func (e *e2e) dumpOutbox() {
+	e.t.Helper()
+	conn, err := pgx.Connect(context.Background(), e.db)
+	if err != nil {
+		e.t.Logf("outbox dump: connect: %v", err)
+		return
+	}
+	defer func() { _ = conn.Close(context.Background()) }()
+	ctx := context.Background()
+	rows, err := conn.Query(ctx, `SELECT event_type, count(*), count(published_at) FROM outbox_events GROUP BY event_type ORDER BY event_type`)
+	if err == nil {
+		for rows.Next() {
+			var typ string
+			var total, published int
+			if err := rows.Scan(&typ, &total, &published); err == nil {
+				e.t.Logf("outbox %-70s total=%d published=%d", typ, total, published)
+			}
+		}
+		rows.Close()
+	} else {
+		e.t.Logf("outbox dump: query: %v", err)
+	}
+	ures, err := conn.Query(ctx, `SELECT aisle, state FROM equipment_units ORDER BY aisle`)
+	if err == nil {
+		for ures.Next() {
+			var aisle int
+			var state string
+			if err := ures.Scan(&aisle, &state); err == nil {
+				e.t.Logf("unit aisle=%d state=%s", aisle, state)
+			}
+		}
+		ures.Close()
+	}
+	var held, total int
+	_ = conn.QueryRow(ctx, `SELECT count(*) FILTER (WHERE convert_from(value, 'UTF8') LIKE '%"state":"HELD"'), count(*) FROM outbox_events`).Scan(&held, &total)
+	e.t.Logf("outbox HELD-bearing rows=%d of %d", held, total)
 }
 
 func (e *e2e) call(method, url, body, key string) (int, map[string]any, http.Header) {
@@ -241,6 +289,7 @@ func TestStoreReshuffleRetrieveAndFaultsAgainstTheEmulator(t *testing.T) {
 		t.Fatalf("retrieve on a held aisle = %d %v", code, m)
 	}
 
+	e.dumpOutbox()
 	assertEvents(t, retrieveA)
 }
 
