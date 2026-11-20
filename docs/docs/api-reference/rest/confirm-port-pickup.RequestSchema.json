@@ -1,0 +1,1 @@
+{"title":"Body","body":{"required":true,"content":{"application/json":{"schema":{"type":"object","required":["container_id"],"additionalProperties":false,"properties":{"container_id":{"type":"string","minLength":1,"maxLength":128,"description":"No control characters.","title":"Id"}},"title":"PickupRequest"}}}}}

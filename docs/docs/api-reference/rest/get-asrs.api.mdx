@@ -1,0 +1,70 @@
+---
+id: get-asrs
+title: "Read an AS/RS"
+description: "Aisles (unit state, open jobs, free positions), ports (the container waiting on each output port), the input port that balances the aisles, and the capacity snapshot."
+sidebar_label: "Read an AS/RS"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "get api-method"
+info_path: docs/api-reference/rest/asrs-control-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Read an AS/RS"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"get"}
+  path={"/asrs/{asrsId}"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Aisles (unit state, open jobs, free positions), ports (the container waiting on each output port), the input port that balances the aisles, and the capacity snapshot.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./get-asrs.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./get-asrs.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./get-asrs.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      
