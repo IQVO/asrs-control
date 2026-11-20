@@ -74,4 +74,39 @@ grep -q 'OTEL_EXPORTER_OTLP_ENDPOINT\|OTEL_SERVICE_NAME' <<<"$off" && fail "otel
 for name in OTEL_EXPORTER_OTLP_ENDPOINT OTEL_SERVICE_NAME ENVIRONMENT SERVICE_VERSION; do
   render --set "extraEnv[0].name=$name" --set "extraEnv[0].value=x" >/dev/null 2>&1 && fail "extraEnv may set $name, which the chart renders"
 done
+
+# --- read-only agent components (ADR 0005) ----------------------------------------------------
+# Off by default; enabled, each renders a Deployment (command /app/<binary>) and a Service, and
+# every env var its binary reads (the same literal scan as cmd/api) is an explicit env entry.
+default_all="$(render)"
+grep -q 'component: mcp\|component: a2a' <<<"$default_all" && fail "mcp and a2a must be off by default"
+agents="$(render --set mcp.enabled=true --set a2a.enabled=true --set database.migrationsExistingSecretKey=MIGRATIONS_DATABASE_URL)"
+for comp in mcp a2a; do
+  dep="$(render --set mcp.enabled=true --set a2a.enabled=true --set database.migrationsExistingSecretKey=MIGRATIONS_DATABASE_URL \
+    --show-only "templates/$comp-deployment.yaml")"
+  grep -q "command: \[\"/app/$comp\"\]" <<<"$dep" || fail "the $comp Deployment does not run /app/$comp"
+  grep -q 'envFrom' <<<"$dep" && fail "the $comp Deployment must not mount the api ConfigMap as env"
+  grep -q 'path: /healthz' <<<"$dep" || fail "the $comp probes must hit /healthz"
+  grep -q 'mountPath: /etc/asrs-control' <<<"$dep" || fail "the $comp Deployment does not mount layout.yaml"
+  # shellcheck disable=SC2207
+  comp_vars=($(grep -ohE '(^|[^A-Za-z])(Getenv|getenv|env|or)\("[A-Z][A-Z0-9_]*"' $(ls "$repo_root/cmd/$comp"/*.go | grep -v _test.go) \
+    "$repo_root"/internal/adapters/outbound/telemetry/telemetry.go | sed -E 's/.*\("//; s/"$//' | sort -u))
+  (( ${#comp_vars[@]} >= 8 )) || fail "found only ${#comp_vars[@]} env names in cmd/$comp; the scan is looking in the wrong place"
+  for var in "${comp_vars[@]}"; do
+    grep -q "name: $var\$" <<<"$dep" || fail "the $comp Deployment does not render $var, which cmd/$comp reads"
+  done
+  for var in $(grep -ohE '"[A-Z][A-Z0-9_]{2,} is required' "$repo_root/cmd/$comp"/main.go | tr -d '"' | sed 's/ is required//' | sort -u); do
+    grep -q "name: $var\$" <<<"$dep" || fail "the $comp Deployment does not render $var, which cmd/$comp requires"
+  done
+  [[ "$(env_value "$dep" OTEL_SERVICE_NAME)" == "asrs-control-$comp" ]] || fail "OTEL_SERVICE_NAME of $comp must be asrs-control-$comp"
+  grep -q "name: asrs-control-$comp\$" <<<"$agents" || fail "no asrs-control-$comp Service/Deployment name"
+done
+[[ "$(env_value "$agents" MCP_ADDR)" == ":8090" ]] || fail "MCP_ADDR must default to :8090"
+[[ "$(env_value "$agents" A2A_ADDR)" == ":8093" ]] || fail "A2A_ADDR must default to :8093"
+agent_url="$(env_value "$agents" A2A_AGENT_URL || true)"
+[[ "$agent_url" =~ ^http://asrs-control-a2a\.[a-z0-9-]+\.svc\.cluster\.local:8093/$ ]] || fail "A2A_AGENT_URL must default to the a2a Service DNS name, got '$agent_url'"
+custom="$(render --set a2a.enabled=true --set a2a.agentUrl=http://a2a.example.invalid/ --show-only templates/a2a-deployment.yaml)"
+[[ "$(env_value "$custom" A2A_AGENT_URL)" == "http://a2a.example.invalid/" ]] || fail "a2a.agentUrl must override A2A_AGENT_URL"
+render --set mcp.enabled=true --set "mcp.extraEnv[0].name=OTEL_SERVICE_NAME" --set "mcp.extraEnv[0].value=x" >/dev/null 2>&1 \
+  && fail "mcp.extraEnv may set OTEL_SERVICE_NAME, which the chart renders"
 echo "render_test: PASS"
