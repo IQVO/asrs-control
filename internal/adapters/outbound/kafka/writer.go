@@ -31,6 +31,13 @@ func NewWriter(brokers string) *kafkago.Writer {
 		WriteTimeout:           10 * time.Second,
 		ReadTimeout:            10 * time.Second,
 		MaxAttempts:            2,
+		// BatchTimeout: the relay sends one outbox row per WriteMessages call, so
+		// kafka-go's default 1s batch wait was paid per ROW — 66 rows took over a
+		// minute while the transaction held every claimed row (the e2e's read
+		// window expired before the last rows' turn; every "wedge" snapshot was a
+		// healthy pass between one-second sends). 50ms keeps per-row latency tiny;
+		// batching is pointless at this service's volume.
+		BatchTimeout: 50 * time.Millisecond,
 	}
 }
 
