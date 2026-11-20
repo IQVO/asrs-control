@@ -76,8 +76,14 @@ func stack(t *testing.T) *e2e {
 		t.Fatalf("start the emulator image %q: %v. Build it first: docker build -t equipment-emulator:e2e <equipment-emulator checkout at fa60024>", image, err)
 	}
 	t.Cleanup(func() { _ = emu.Terminate(ctx) })
-	mqURL, _ := mq.PortEndpoint(ctx, "1883/tcp", "tcp")
-	emuURL, _ := emu.PortEndpoint(ctx, "8080/tcp", "http")
+	mqURL, err := mq.PortEndpoint(ctx, "1883/tcp", "tcp")
+	if err != nil {
+		t.Fatalf("mosquitto endpoint: %v", err)
+	}
+	emuURL, err := emu.PortEndpoint(ctx, "8080/tcp", "http")
+	if err != nil {
+		t.Fatalf("emulator endpoint: %v", err)
+	}
 	return &e2e{t: t, api: startAsrsControl(t, mqURL), emu: emuURL}
 }
 
@@ -214,12 +220,17 @@ func TestStoreReshuffleRetrieveAndFaultsAgainstTheEmulator(t *testing.T) {
 		t.Fatalf("fault = %d %v", code, m)
 	}
 	deadline := time.Now().Add(20 * time.Second)
+	var lastState any
 	for time.Now().Before(deadline) {
 		_, view, _ := e.call(http.MethodGet, e.api+"/asrs/ASRS1", "", "")
-		if view["aisles"].([]any)[0].(map[string]any)["state"] == "HELD" {
+		lastState = view["aisles"].([]any)[0].(map[string]any)["state"]
+		if lastState == "HELD" {
 			break
 		}
 		time.Sleep(200 * time.Millisecond)
+	}
+	if lastState != "HELD" {
+		t.Fatalf("aisle 1 never reached HELD within 20s; last state = %v", lastState)
 	}
 	if code, m, _ := e.call(http.MethodPost, e.api+"/asrs/ASRS1/storage-jobs", `{"kind":"RETRIEVE","container_id":"C"}`, ""); code != http.StatusUnprocessableEntity || m["code"] != "aisle-unavailable" {
 		t.Fatalf("retrieve on a held aisle = %d %v", code, m)
