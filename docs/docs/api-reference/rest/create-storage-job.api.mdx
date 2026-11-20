@@ -1,0 +1,74 @@
+---
+id: create-storage-job
+title: "Request a store or a retrieve"
+description: "`kind` STORE stores the container waiting on input port `port_id`; its rack position is reserved now"
+sidebar_label: "Request a store or a retrieve"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/asrs-control-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Request a store or a retrieve"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/asrs/{asrsId}/storage-jobs"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+`kind` STORE stores the container waiting on input port `port_id`; its rack position is reserved now
+(a full aisle is `422 storage-full`). `kind` RETRIEVE presents a stored container at `port_id`, or at
+the first output port of its aisle when `port_id` is omitted; retrieves to one port are presented in
+the order they are accepted. `reference` is echoed in every event of the job.
+
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./create-storage-job.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./create-storage-job.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./create-storage-job.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

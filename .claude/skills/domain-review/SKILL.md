@@ -5,68 +5,43 @@ disable-model-invocation: true
 argument-hint: "[git range]"
 ---
 
-<!-- TEMPLATE NOTE (warehouse-harness-template v2): adapt every repo-specific example in this file (file paths, type names, field names) to THIS repo real code. Do not copy-paste verbatim. -->
+Perform a ubiquitous-language drift review of the current changes (or `$ARGUMENTS` if given),
+comparing new or changed code against `.claude/rules/domain-model.md` and the site's
+`docs/docs/ddd/ubiquitous-language.md`.
 
-Perform a ubiquitous-language drift review of the current changes (or
-`$ARGUMENTS` if given), comparing new/changed code against
-`.claude/rules/domain-model.md` (or this repo's equivalent doc — check
-`AGENTS.md`/`CLAUDE.md` for where the ubiquitous language lives if that
-file doesn't exist here).
-
-Ubiquitous language drift is the quiet failure mode DDD is supposed to
-prevent: code that technically works but silently renames, reshapes, or
-duplicates a concept the domain-model doc already named — so future
-readers can no longer map code to domain conversation.
+Drift is code that works but silently renames, reshapes or duplicates a concept the model already
+names, so readers can no longer map code to the domain conversation.
 
 ## What to check, in priority order
 
-1. **A new type/field/method that duplicates an existing domain concept
-   under a different name.** If the domain-model doc already names a
-   concept (e.g. this repo's "Usable inventory" — on-hand minus active
-   reservations minus held/damaged), a new calculation that computes the
-   same thing under a different name (`AvailableQty`, `FreeStock`, etc.)
-   is drift — even if the math is correct, it fragments the vocabulary.
-   Flag it and point at the existing name.
-2. **A domain type/method named in implementation terms instead of
-   domain terms.** internal/domain/ code should read like the ubiquitous
-   language, not like database/HTTP vocabulary — a method called
-   `UpdateRow` or `PatchState` where the domain-model doc would call the
-   equivalent operation `Stow`/`Revoke`/`RunCycleCount` is drift, and the
-   fitness-test suite won't catch this because it's a naming problem, not
-   an import-direction problem.
-3. **An invariant enforced in code that the domain-model doc doesn't
-   mention, or vice versa.** If a new domain rule was added to the code
-   (a new validation, a new state-transition guard), the domain-model doc
-   should be updated in the SAME PR — an undocumented invariant is
-   invisible to the next person who touches that aggregate and may
-   accidentally remove it thinking it's dead code.
-4. **A value object that should be closed but was implemented open (or
-   vice versa).** This repo's own domain-model doc calls out
-   `HandlingTag` as a deliberately CLOSED enum (unlike facility-layout's
-   open `LocationType`) because it carries real regulatory meaning —
-   check any new categorical field against whether the domain actually
-   wants an open or closed set, and flag a mismatch either direction.
-5. **A cross-aggregate rule implemented as a cross-aggregate call instead
-   of an explicit local check, or vice versa**, per whatever this repo's
-   own domain-model doc says about which invariants are local vs. which
-   legitimately need external state (e.g. this repo's DOT segregation
-   check is explicitly documented as "purely LOCAL... no cross-context
-   call" — a change that quietly makes it call out to another service
-   would be a real regression worth flagging even if functionally it
-   still "works").
-6. **New terminology introduced without updating the domain-model doc.**
-   If new code introduces a genuinely new domain concept the doc doesn't
-   yet name, that's not necessarily wrong — but the doc needs a new entry
-   in the SAME PR, or the vocabulary silently forks between prose and
-   code.
+1. **A duplicate of an existing concept under another name.** The model names *RackPosition*
+   (`layout.Position`), *Reservation*, *Velocity* (FAST/SLOW), *Presentation*, *Pickup*,
+   *Reshuffle*. A new `Slot`/`Location`/`Bin` type for a position, a `free` count computed outside
+   `storagemap.Map.Free`, or a "priority" that is really velocity is drift: point at the existing
+   name.
+2. **Implementation terms in the domain.** `internal/domain/` reads like the model:
+   `ReserveStore`, `CompleteMotion`, `Present`, `RequestCancel`, `Report`. A method called
+   `UpdateRow`, `SetStatus` or `HandleMessage` there is drift (fitness tests check imports, not
+   names).
+3. **Telegram vocabulary leaking up.** Telegram types (STORE, JOB_DONE, ACK, PORT_ARRIVAL) belong to
+   the adapter and `internal/application/telegrams`; the domain speaks of jobs, motions,
+   presentations and unit states. A domain type named after a telegram is drift.
+4. **An invariant in code but not in the model, or the reverse.** Invariants 1-6, depth rules D1 and
+   D2, "one job per aisle unit", "HELD fails queued jobs", "retrieves to one port in acceptance
+   order". A new guard needs its line in `.claude/rules/domain-model.md` in the same PR.
+5. **Closed sets opened (or the reverse).** Job statuses, failure reasons, PackML states (IDLE,
+   EXECUTE, HELD only: protocol v1 sends no other) and scan results are closed enums mirrored in
+   `apis/*.yaml`. Adding a value is a contract change (reason enums are pinned by consumers).
+6. **Invariant 6 in language.** A term that only makes sense inside the rack (position, depth,
+   reshuffle) appearing in a REST DTO or an event payload is a boundary leak, not just a naming
+   issue.
+7. **New terminology without a model entry.** A genuinely new concept needs its row in the
+   domain-model rule and the ubiquitous-language page in the same PR.
 
 ## Output format
 
-For each finding: the term/concept involved, where it appears in the
-domain-model doc (or "not yet documented"), where the drift appears in
-code, and a one-sentence recommendation (rename, document, or confirm
-it's an intentional new concept). If the changes introduce no new domain
-concepts and use existing vocabulary correctly, say so plainly.
+For each finding: the term, where the model defines it (or "not yet documented"), where the drift
+is in code, and a one-sentence recommendation (rename, document, or confirm a new concept). If the
+change uses the existing vocabulary correctly, say so plainly.
 
-This command never modifies files. It is advisory input for the author
-to act on, not a blocking gate.
+This command never modifies files. It is advisory input for the author, not a blocking gate.
