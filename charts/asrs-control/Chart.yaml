@@ -1,0 +1,8 @@
+apiVersion: v2
+name: asrs-control
+description: asrs-control - the WCS AS/RS controller (storage positions, storage jobs, port presentation, reshuffles, equipment state) over telegram protocol v1 on MQTT
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/IQVO/asrs-control
+keywords: [wcs, asrs, mqtt, golang]

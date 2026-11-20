@@ -187,8 +187,8 @@ jobs:
 
   # Fast, BLOCKING mutation subset: runs on every push/PR so a drop in test
   # quality (tests that execute but stop asserting) is caught immediately.
-  # Subset = ./internal/domain/storagejob, the StockUnit aggregate: the richest
-  # behavioural core in the domain (15 of the 41 domain mutants) and it
+  # Subset = ./internal/domain/storagejob, the storagejob aggregate: the richest
+  # behavioural core in the domain (29 of the 172 domain mutants) and it
   # completes in ~1 minute. Thresholds/workers/timeout come from .gremlins.yaml,
   # so this job, the scheduled `mutation` job below and `make mutation` all
   # agree. The exhaustive run stays in the `mutation` job.
