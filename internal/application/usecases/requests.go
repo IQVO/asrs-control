@@ -54,7 +54,7 @@ func (s *Service) RequestStore(ctx context.Context, r StoreRequest) (*storagejob
 		if err != nil {
 			return err
 		}
-		return insertExternal(ctx, s.d.Jobs, j)
+		return a.insertExternal(ctx, j)
 	})
 	if err != nil {
 		return nil, err
@@ -64,12 +64,14 @@ func (s *Service) RequestStore(ctx context.Context, r StoreRequest) (*storagejob
 
 // insertExternal stores a new external job; the repository's per-container uniqueness of open
 // external jobs (P2-R24) is what closes the race between aisles, and it rolls the unit of work back.
-func insertExternal(ctx context.Context, jobs ports.StorageJobs, j *storagejob.Job) error {
-	if err := jobs.Insert(ctx, j); errors.Is(err, ports.ErrOpenJobExists) {
+// The job counts as accepted once the unit of work commits (ADR 0004).
+func (a *aisle) insertExternal(ctx context.Context, j *storagejob.Job) error {
+	if err := a.s.d.Jobs.Insert(ctx, j); errors.Is(err, ports.ErrOpenJobExists) {
 		return ErrContainerBusy
 	} else if err != nil {
 		return err
 	}
+	a.accepted = append(a.accepted, j.Kind())
 	return nil
 }
 
@@ -133,7 +135,7 @@ func (s *Service) RequestRetrieve(ctx context.Context, r RetrieveRequest) (*stor
 		if err != nil {
 			return err
 		}
-		return insertExternal(ctx, s.d.Jobs, j)
+		return a.insertExternal(ctx, j)
 	})
 	if err != nil {
 		return nil, err

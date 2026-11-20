@@ -8,6 +8,7 @@ import (
 	"github.com/IQVO/asrs-control/internal/domain/capacity"
 	"github.com/IQVO/asrs-control/internal/domain/equipment"
 	"github.com/IQVO/asrs-control/internal/domain/layout"
+	"github.com/IQVO/asrs-control/internal/domain/storagejob"
 	"github.com/IQVO/asrs-control/internal/domain/storagemap"
 )
 
@@ -22,6 +23,8 @@ type aisle struct {
 	events []any
 	cmds   []telegrams.Command
 	quiet  bool // a duplicate telegram: nothing changed, nothing to save
+	// accepted are the kinds of the external jobs this unit of work accepted (ADR 0004 metrics).
+	accepted []storagejob.Kind
 }
 
 // inAisle runs fn in one unit of work on aisle n, then the scheduler, then saves. The commands it
@@ -52,6 +55,7 @@ func (s *Service) inAisle(ctx context.Context, l layout.Layout, n int, fn func(c
 			cmds := a.cmds
 			s.d.UoW.AfterCommit(ctx, func() { s.d.Downlink.Send(base, l.ID, cmds...) })
 		}
+		s.observeAfterCommit(ctx, base, a)
 		return nil
 	})
 }
