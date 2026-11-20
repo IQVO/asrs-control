@@ -3,9 +3,12 @@ name: how-to-add-a-frontend-remote
 description: Add or change a micro-frontend remote under web/ (vite federation config in object form, /mfes/<context>/ base, remoteEntry, Docker/nginx packaging, console integration). Use when touching web/.
 ---
 
-<!-- TEMPLATE NOTE (warehouse-harness-template v2): adapt every repo-specific example in this file (file paths, type names, field names) to THIS repo real code. Do not copy-paste verbatim. -->
-
 # How to add a frontend remote
+
+asrs-control has **no `web/` remote yet** (none is planned in the current fleet-standard
+waves). This guide is the fleet recipe for when one is added: the first remote would show the
+AS/RS state of `GET /asrs/{asrsId}` and the jobs, never a rack position (invariant 6). Until
+then nothing below applies to a file in this repository.
 
 Use when adding a new screen/feature to this repo's `web/` Module
 Federation remote, or when standing up a NEW remote for a bounded context

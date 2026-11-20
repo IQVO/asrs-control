@@ -5,8 +5,6 @@ disable-model-invocation: true
 argument-hint: "[git range]"
 ---
 
-<!-- TEMPLATE NOTE (warehouse-harness-template v2): adapt every repo-specific example in this file (file paths, type names, field names) to THIS repo real code. Do not copy-paste verbatim. -->
-
 Perform a bounded-context boundary and ADR-compliance review of the
 current changes (or `$ARGUMENTS` if given, e.g. a branch/PR diff range).
 
@@ -27,35 +25,35 @@ check a design decision against this fleet's standing architecture.
 2. **Customer/Supplier direction, per `.claude/rules/domain-model.md`
    (or this repo's equivalent doc).** A new outbound call to a sibling
    context must go the direction ADRs already established — check
-   docs/docs/adr/ for the relevant context-mapping ADR before assuming
+   `docs/adr/` (ADR 0001 is this repo's context map: material-flow-control
+   upstream caller, the PLC Conformist, exception-management downstream) before assuming
    a new integration is fine. Flag any outbound call added to a context
    this repo doesn't already integrate with; that's a new architectural
    decision that needs its own ADR, not a code change slipped in
    silently.
-3. **MCP additive-boundary rule (fleet-wide, `.claude/rules/fleet/no-auth-and-mcp.md`).** A change under
-   internal/adapters/inbound/mcp/ must depend only on
+3. **MCP additive-boundary rule (fleet-wide, `.claude/rules/fleet/no-auth-and-mcp.md`).** This repo has no
+   MCP adapter yet. When one is added under internal/adapters/inbound/mcp/ it must depend only on
    application/domain, and nothing else in the codebase may depend on
-   it. If this repo has a `TestMCPAdapterDependencyRule` fitness test,
-   confirm it's green; if not, check by eye.
+   it; the MCP authority fitness tests in `internal/architecture/` then stop being vacuous.
 2b. **Zero-write guardrails, where applicable.** If this repo has a
    documented zero-write constraint (e.g. warehouse-ops-agent v1), check
    no mutating HTTP method or MCP tool without `ReadOnlyHint: true` was
    added to an outbound/inbound surface bound by that constraint.
-4. **Analytics isolation (the fleet's analytics-read-side ADR, where this repo has an
-   internal/analytics/ read side).** The OLTP domain/application layers
-   must never import the analytics store or read model; the analytics
-   side must depend on nothing internal except itself. This is a real,
-   already-fitness-tested rule in most repos — confirm the test exists
-   and is green rather than re-deriving it by eye if possible.
-5. **Kafka consumer-group pattern correctness.** A new Kafka consumer
-   must use either (a) a named long-lived constant for a genuinely
-   single-instance consumer, or (b) a per-process-unique generated group
-   id for an event-sourced local-cache consumer that replays full
-   history on every start. Flag any new consumer whose pattern doesn't
-   match its actual replay behavior — this is a correctness bug, not a
-   style issue (see this repo's `.claude/skills/how-to-add-an-integration-event/SKILL.md`
-   for the two patterns and the incident that taught this fleet the
-   difference).
+4. **Invariant 6: nothing inside the rack leaves the context.** No rack position
+   (`layout.Position`), reshuffle job or internal move may appear in a REST body
+   (`internal/adapters/inbound/http/dto.go`), an event payload
+   (`internal/adapters/outbound/events/encode.go`) or `apis/*.yaml` outside the MQTT
+   telegram channels. A change that exposes one is a NEEDS-ADR finding (seam decision 2 of the
+   WCS design). There is no analytics read side in this repo; the `.analytics` topic only
+   carries the twin of every event.
+5. **The PLC link and the single scheduler (ADR 0002).** Down telegrams leave only from
+   a `UnitOfWork.AfterCommit` hook; an up telegram is claimed in `processed_telegrams` in the
+   same transaction as its effect; every write locks its aisle (`usecases.Service.inAisle`);
+   one job per aisle unit is with the PLC. A change that sends from inside a transaction, skips
+   the claim, writes outside an aisle unit of work or allows a second replica
+   (`charts/asrs-control` refuses `replicaCount` other than 1) contradicts ADR 0002. This repo
+   has no Kafka consumer; a first one needs an ADR and the consumer-group rules in
+   `.claude/skills/how-to-add-an-integration-event/SKILL.md`.
 6. **A new bounded-context integration with no companion documentation.**
    If this change introduces or changes a cross-repo contract (a new
    REST call, a new Kafka topic subscription, a new MCP tool consumed by
