@@ -63,6 +63,9 @@ type StorageJobs interface {
 	CountOpen(ctx context.Context, asrsID string) (int, error)
 	CountRetrievals(ctx context.Context, asrsID, containerID string, since time.Time) (int, error)
 	InFlightCommands(ctx context.Context, asrsID string) ([]*storagejob.Job, error)
+	// ListExternal pages the AS/RS's external jobs newest first (descending Seq): at most limit
+	// jobs with Seq < beforeSeq (0 = from the newest), of status when it is not empty.
+	ListExternal(ctx context.Context, asrsID string, status storagejob.Status, beforeSeq int64, limit int) ([]*storagejob.Job, error)
 }
 
 // Units persists one EquipmentUnit per aisle; Lock is taken after the aisle's map lock.

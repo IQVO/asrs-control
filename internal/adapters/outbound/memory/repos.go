@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -168,6 +169,15 @@ func (r *StorageJobs) InFlightCommands(_ context.Context, asrsID string) ([]*sto
 	return r.where(func(s storagejob.State) bool {
 		return s.AsrsID == asrsID && (s.Status == storagejob.Dispatched || s.Status == storagejob.CancelRequested)
 	}), nil
+}
+
+func (r *StorageJobs) ListExternal(_ context.Context, asrsID string, status storagejob.Status, beforeSeq int64, limit int) ([]*storagejob.Job, error) {
+	js := r.where(func(s storagejob.State) bool {
+		return s.AsrsID == asrsID && s.Kind != storagejob.Reshuffle && (status == "" || s.Status == status) &&
+			(beforeSeq == 0 || s.Seq < beforeSeq)
+	})
+	slices.Reverse(js)
+	return js[:min(len(js), limit)], nil
 }
 
 type Units struct{ s *Store }
