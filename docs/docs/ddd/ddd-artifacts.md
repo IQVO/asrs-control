@@ -9,7 +9,7 @@ description: "The ddd-crew artifact pack of asrs-control and where each artifact
 # DDD artifacts (ddd-crew)
 
 The pack follows the [ddd-crew](https://github.com/ddd-crew) templates. Every identifier, state, event and reason in it is
-taken from the code on `develop`; the strategic placement comes from the [WCS strategic design](https://iqvo.github.io/warehouse-docs/wcs/) in warehouse-docs.
+taken from the code on `develop`; the strategic placement comes from the [WCS strategic design](https://iqvo.github.io/warehouse-docs/wcs) in warehouse-docs.
 
 | Artifact | What it shows |
 | --- | --- |
