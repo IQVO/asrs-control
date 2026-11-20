@@ -67,12 +67,21 @@ type StorageJobs struct{ s *Store }
 func NewStorageJobs(s *Store) *StorageJobs { return &StorageJobs{s: s} }
 
 func (r *StorageJobs) Insert(_ context.Context, j *storagejob.Job) error {
+	err := error(nil)
 	r.s.with(func(t *tables) {
+		if j.External() {
+			for _, o := range t.jobs {
+				if o.AsrsID == j.AsrsID() && o.ContainerID == j.ContainerID() && o.Kind != storagejob.Reshuffle && storagejob.Rehydrate(o).Open() {
+					err = ports.ErrOpenJobExists
+					return
+				}
+			}
+		}
 		t.seq++
 		j.AssignSeq(t.seq)
 		t.jobs[j.ID()] = j.State()
 	})
-	return nil
+	return err
 }
 
 func (r *StorageJobs) Update(_ context.Context, j *storagejob.Job) error {

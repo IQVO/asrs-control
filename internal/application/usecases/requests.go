@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/IQVO/asrs-control/internal/application/ports"
 	"github.com/IQVO/asrs-control/internal/domain/layout"
 	"github.com/IQVO/asrs-control/internal/domain/storagejob"
 	"github.com/IQVO/asrs-control/internal/domain/storagemap"
@@ -43,6 +44,8 @@ func (s *Service) RequestStore(ctx context.Context, r StoreRequest) (*storagejob
 			return ErrStorageFull
 		case errors.Is(err, storagemap.ErrContainerInRack):
 			return ErrContainerAlreadyStored
+		case errors.Is(err, storagemap.ErrContainerBusy):
+			return ErrContainerBusy
 		case err != nil:
 			return err
 		}
@@ -51,12 +54,23 @@ func (s *Service) RequestStore(ctx context.Context, r StoreRequest) (*storagejob
 		if err != nil {
 			return err
 		}
-		return s.d.Jobs.Insert(ctx, j)
+		return insertExternal(ctx, s.d.Jobs, j)
 	})
 	if err != nil {
 		return nil, err
 	}
 	return s.d.Jobs.Get(ctx, id)
+}
+
+// insertExternal stores a new external job; the repository's per-container uniqueness of open
+// external jobs (P2-R24) is what closes the race between aisles, and it rolls the unit of work back.
+func insertExternal(ctx context.Context, jobs ports.StorageJobs, j *storagejob.Job) error {
+	if err := jobs.Insert(ctx, j); errors.Is(err, ports.ErrOpenJobExists) {
+		return ErrContainerBusy
+	} else if err != nil {
+		return err
+	}
+	return nil
 }
 
 // admitStore refuses a container already in the AS/RS or with an open job, and classifies it.
@@ -119,7 +133,7 @@ func (s *Service) RequestRetrieve(ctx context.Context, r RetrieveRequest) (*stor
 		if err != nil {
 			return err
 		}
-		return s.d.Jobs.Insert(ctx, j)
+		return insertExternal(ctx, s.d.Jobs, j)
 	})
 	if err != nil {
 		return nil, err

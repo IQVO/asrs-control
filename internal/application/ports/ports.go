@@ -17,6 +17,10 @@ import (
 // ErrJobNotFound is answered by StorageJobs for an unknown job or telegram.
 var ErrJobNotFound = errors.New("storage job not found")
 
+// ErrOpenJobExists is answered by StorageJobs.Insert when an open (non-terminal) external job
+// (store or retrieve, not an internal reshuffle) already exists for the same AS/RS and container.
+var ErrOpenJobExists = errors.New("an open storage job already exists for the container")
+
 type Clock interface{ Now() time.Time }
 
 type IDs interface{ NewID() string }
@@ -44,7 +48,8 @@ type StorageMaps interface {
 	Find(ctx context.Context, asrsID, containerID string) (aisle int, found bool, err error)
 }
 
-// StorageJobs persists jobs. Insert assigns the job's Seq (acceptance order). Open lists an
+// StorageJobs persists jobs. Insert assigns the job's Seq (acceptance order) and returns
+// ErrOpenJobExists when an open external job already exists for the same (asrsID, containerID). Open lists an
 // aisle's open jobs (internal ones included) in ascending Seq, that is acceptance, order:
 // scheduling.Next trusts that order. HasOpen and CountOpen see external jobs only.
 type StorageJobs interface {

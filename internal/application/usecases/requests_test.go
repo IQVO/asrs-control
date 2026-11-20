@@ -263,3 +263,39 @@ func TestARetrieveWithoutRoomToReshuffleFails(t *testing.T) {
 		t.Fatalf("A is free again after the failure: %v", err)
 	}
 }
+
+func TestTwoStoresOfOneContainerViaDifferentAislesAdmitOnlyOne(t *testing.T) {
+	h := newHarness(t, twoAisles())
+	h.store("A", "IN1")
+	_, err := h.svc.RequestStore(h.ctx, usecases.StoreRequest{AsrsID: "ASRS1", ContainerID: "A", PortID: "IN2"})
+	if !errors.Is(err, usecases.ErrContainerBusy) {
+		t.Fatalf("second store of A via another aisle = %v, want ErrContainerBusy", err)
+	}
+	if n := len(h.down.Sent("ASRS1")); n != 1 {
+		t.Fatalf("%d commands sent, want exactly one STORE", n)
+	}
+	// the refused unit of work left no reservation in aisle 2: its 4 positions are all free.
+	j := h.store("B", "IN2")
+	if j.Status() != storagejob.Dispatched || j.To().Aisle != 2 {
+		t.Fatalf("B = %+v", j.State())
+	}
+	if caps := eventsOf[capacity.AsrsCapacityChanged](h); caps[len(caps)-1].PositionsFree != 6 {
+		t.Fatalf("positions free = %d, want 6 (two reservations only)", caps[len(caps)-1].PositionsFree)
+	}
+}
+
+func TestAStoreOfAContainerStillPresentedOnAPortIsRefusedWithAUsecaseError(t *testing.T) {
+	h := newHarness(t, tinyLayout())
+	h.stored("A", "IN1")
+	r := h.retrieve("A")
+	h.ackLast()
+	h.done(r.ID())
+	h.arrive("OUT1", "A") // job DONE, pickup not confirmed
+	if h.job(r.ID()).Status() != storagejob.Done {
+		t.Fatal("retrieve not DONE")
+	}
+	_, err := h.svc.RequestStore(h.ctx, usecases.StoreRequest{AsrsID: "ASRS1", ContainerID: "A", PortID: "IN1"})
+	if !errors.Is(err, usecases.ErrContainerBusy) && !errors.Is(err, usecases.ErrContainerAlreadyStored) {
+		t.Fatalf("RequestStore = %v, want a usecases refusal", err)
+	}
+}

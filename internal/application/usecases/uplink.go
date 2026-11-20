@@ -131,8 +131,8 @@ func (a *aisle) jobFailed(ctx context.Context, t telegrams.UpTelegram) error {
 	if err != nil {
 		return err
 	}
-	if !j.Open() {
-		a.s.d.Log.WarnContext(ctx, "JOB_FAILED for a job that already ended; ignored", "job", j.ID(), "status", j.Status())
+	if !j.Open() || !j.InFlight() { // ended (duplicate or late), or not with the PLC (stray)
+		a.s.d.Log.WarnContext(ctx, "JOB_FAILED for a job that is not with the PLC; ignored", "job", j.ID(), "status", j.Status())
 		return nil
 	}
 	return a.fail(ctx, j, storagejob.Failure{Reason: storagejob.ReasonForPLC(t.Reason), PLCReason: t.Reason, At: a.now, PLCTime: t.Timestamp})

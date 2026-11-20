@@ -383,3 +383,64 @@ func TestCapacityIsComputedFromMapsUnitsAndOpenJobs(t *testing.T) {
 		t.Fatalf("capacity = %+v, want %+v", last.Snapshot, want)
 	}
 }
+
+func TestAStrayJobFailedOnAQueuedJobIsIgnored(t *testing.T) {
+	h := newHarness(t, tinyLayout())
+	h.store("A", "IN1")
+	q := h.store("B", "IN1")
+	before := h.settled()
+	h.up(telegrams.UpTelegram{Type: telegrams.UpJobFailed, JobID: q.ID(), Reason: "PORT_OCCUPIED"})
+	if got := h.job(q.ID()); got.Status() != storagejob.Queued {
+		t.Fatalf("B = %s, want QUEUED", got.Status())
+	}
+	if h.settled() != before {
+		t.Fatal("a stray JOB_FAILED changed events or commands")
+	}
+}
+
+func TestALateJobFailedAfterJobDoneDoesNotDropThePortArrival(t *testing.T) {
+	h := newHarness(t, tinyLayout())
+	h.stored("A", "IN1")
+	r := h.retrieve("A")
+	h.ackLast()
+	h.done(r.ID())
+	h.up(telegrams.UpTelegram{Type: telegrams.UpJobFailed, JobID: r.ID(), Reason: "CONTAINER_NOT_AT_PORT"})
+	if got := h.job(r.ID()); got.Status() != storagejob.AwaitingArrival {
+		t.Fatalf("retrieve = %s, want AWAITING_ARRIVAL", got.Status())
+	}
+	h.arrive("OUT1", "A")
+	if got := h.job(r.ID()); got.Status() != storagejob.Done {
+		t.Fatalf("retrieve = %s, want DONE", got.Status())
+	}
+	if n := len(eventsOf[storagejob.StorageJobFailed](h)); n != 0 {
+		t.Fatalf("%d failures, want 0", n)
+	}
+	if p := eventsOf[storagejob.ContainerPresentedAtPort](h); len(p) != 1 || p[0].Scan != storagejob.ScanRead {
+		t.Fatalf("presented = %+v", p)
+	}
+}
+
+func TestJobDoneBeforeItsAckThenTheLateAckAndExpiryGiveOneOutcome(t *testing.T) {
+	h := newHarness(t, tinyLayout())
+	a := h.store("A", "IN1")
+	h.done(a.ID()) // the PLC's JOB_DONE overtakes the command's ACK
+	if h.job(a.ID()).Status() != storagejob.Done {
+		t.Fatalf("A = %s, want DONE", h.job(a.ID()).Status())
+	}
+	before := h.settled()
+	if err := h.svc.HandleAck(h.ctx, "ASRS1", a.TelegramID(), true, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.svc.HandleExpired(h.ctx, "ASRS1", a.TelegramID()); err != nil {
+		t.Fatal(err)
+	}
+	if h.settled() != before || h.job(a.ID()).Status() != storagejob.Done {
+		t.Fatal("a late ACK or expiry changed the DONE job")
+	}
+	if n := len(eventsOf[storagejob.ContainerStored](h)); n != 1 {
+		t.Fatalf("%d ContainerStored, want 1", n)
+	}
+	if n := len(eventsOf[storagejob.StorageJobFailed](h)); n != 0 {
+		t.Fatalf("%d failures, want 0", n)
+	}
+}

@@ -186,3 +186,43 @@ func TestDoublesBehave(t *testing.T) {
 		t.Fatal("Reset")
 	}
 }
+
+func TestInsertRefusesASecondOpenExternalJobForAContainer(t *testing.T) {
+	ctx := context.Background()
+	jobs := memory.NewStorageJobs(memory.NewStore())
+	pos := layout.Position{Aisle: 1, Level: 1, Slot: 1, Depth: 1}
+	store := func(id, container string) *storagejob.Job {
+		j, err := storagejob.NewStore(storagejob.Spec{ID: id, AsrsID: "ASRS1", Aisle: 1, ContainerID: container, PortID: "IN1", To: pos, At: t0})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}
+	first := store("j1", "C1")
+	if err := jobs.Insert(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := jobs.Insert(ctx, store("j2", "C1")); !errors.Is(err, ports.ErrOpenJobExists) {
+		t.Fatalf("second open job = %v, want ErrOpenJobExists", err)
+	}
+	if err := jobs.Insert(ctx, store("j3", "C2")); err != nil {
+		t.Fatalf("another container: %v", err)
+	}
+	rs, err := storagejob.NewReshuffle(storagejob.Spec{ID: "r1", AsrsID: "ASRS1", Aisle: 1, ContainerID: "C1", ParentID: "j1",
+		From: pos, To: layout.Position{Aisle: 1, Level: 1, Slot: 2, Depth: 1}, At: t0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := jobs.Insert(ctx, rs); err != nil {
+		t.Fatalf("a reshuffle is exempt: %v", err)
+	}
+	if _, err := first.Fail(storagejob.Failure{Reason: storagejob.ReasonEquipmentFault, At: t0}); err != nil {
+		t.Fatal(err)
+	}
+	if err := jobs.Update(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := jobs.Insert(ctx, store("j4", "C1")); err != nil {
+		t.Fatalf("after the first ended: %v", err)
+	}
+}
