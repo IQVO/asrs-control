@@ -1,0 +1,16 @@
+# asrs-control layout file (ASRS_LAYOUT_FILE, ADR 0002). The field names are the
+# equipment emulator world's `asrs` block; emulator-only fields (baseSeconds,
+# perLevelSeconds, perSlotSeconds, nodeId) are accepted and ignored. `cost`
+# weighs travel per level and per slot for position assignment (default 1 and 1).
+asrs:
+  - id: ASRS1
+    aisles: 2
+    levels: 8
+    slots: 40
+    doubleDeep: true
+    cost: {perLevel: 1.5, perSlot: 0.2}
+    ports:
+      - {id: IN1, aisle: 1, kind: INPUT}
+      - {id: OUT1, aisle: 1, kind: OUTPUT}
+      - {id: IN2, aisle: 2, kind: INPUT}
+      - {id: OUT2, aisle: 2, kind: OUTPUT}
