@@ -4,6 +4,7 @@ package postgres_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/IQVO/asrs-control/internal/adapters/outbound/postgres"
@@ -49,16 +50,19 @@ func TestListExternalPagesExternalJobsNewestFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	all, err := jobs.ListExternal(ctx, "ASRS1", "", 0, 10)
-	if got := jobIDs(all); err != nil || len(got) != 3 || got[0] != "sj-5" || got[1] != "sj-1" || got[2] != "sj-9" {
-		t.Fatalf("ListExternal = %v (%v), want sj-5, sj-1, sj-9 (newest first, no reshuffle, no other AS/RS)", got, err)
-	}
-	page, err := jobs.ListExternal(ctx, "ASRS1", "", all[0].Seq(), 1)
-	if got := jobIDs(page); err != nil || len(got) != 1 || got[0] != "sj-1" {
-		t.Fatalf("page after sj-5 = %v (%v), want [sj-1]", got, err)
-	}
-	failed, err := jobs.ListExternal(ctx, "ASRS1", storagejob.Failed, 0, 10)
-	if got := jobIDs(failed); err != nil || len(got) != 1 || got[0] != "sj-1" {
-		t.Fatalf("FAILED = %v (%v), want [sj-1]", got, err)
+	all := wantJobs(t, "newest first, no reshuffle, no other AS/RS", "sj-5,sj-1,sj-9")(jobs.ListExternal(ctx, "ASRS1", "", 0, 10))
+	wantJobs(t, "the page after sj-5", "sj-1")(jobs.ListExternal(ctx, "ASRS1", "", all[0].Seq(), 1))
+	wantJobs(t, "FAILED", "sj-1")(jobs.ListExternal(ctx, "ASRS1", storagejob.Failed, 0, 10))
+}
+
+// wantJobs asserts a ListExternal answer is exactly the comma-separated ids, and returns it.
+func wantJobs(t *testing.T, what, want string) func([]*storagejob.Job, error) []*storagejob.Job {
+	t.Helper()
+	return func(js []*storagejob.Job, err error) []*storagejob.Job {
+		t.Helper()
+		if got := strings.Join(jobIDs(js), ","); err != nil || got != want {
+			t.Fatalf("%s = %s (%v), want %s", what, got, err, want)
+		}
+		return js
 	}
 }
