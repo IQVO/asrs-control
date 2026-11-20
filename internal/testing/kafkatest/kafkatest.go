@@ -10,6 +10,7 @@ package kafkatest
 import (
 	"context"
 	"errors"
+	"net"
 	"os"
 	"runtime/pprof"
 	"sync"
@@ -39,6 +40,16 @@ func Brokers(t *testing.T) []string {
 			return
 		}
 		brokers, errStart = c.Brokers(ctx)
+		// Rewrite localhost to 127.0.0.1: the module returns "localhost:<mapped>",
+		// and one CI run hung forever inside net.Resolver.lookupIPAddr resolving
+		// "localhost" during the writer's LookupPartition — an undeadlined DNS
+		// lookup that held the outbox relay's row locks with it. IP literals skip
+		// the resolver entirely.
+		for i, b := range brokers {
+			if host, port, err := net.SplitHostPort(b); err == nil && (host == "localhost" || host == "") {
+				brokers[i] = net.JoinHostPort("127.0.0.1", port)
+			}
+		}
 	})
 	if errStart != nil {
 		t.Fatalf("start kafka: %v", errStart)
