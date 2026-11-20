@@ -98,7 +98,12 @@ func startAsrsControl(t *testing.T, mqURL string) string {
 	// github.com/testcontainers/testcontainers-go/modules/kafka — this test
 	// never reads a broker address from the environment, it wires the one it
 	// started into the real app config (TestKafkaIntegrationTestsUseTestcontainers).
-	vars := map[string]string{"KAFKA_BROKERS": strings.Join(kafkatest.Brokers(t), ","), "MQTT_URL": mqURL, "ASRS_LAYOUT_FILE": layoutFile,
+	brokers := kafkatest.Brokers(t)
+	// The fleet convention (outbound-shipping's kafkatest): auto-creation is OFF and the
+	// topics exist, one partition each with a leader, BEFORE the app's relay first writes.
+	kafkatest.CreateTopic(t, "warehouse.asrs-control.events")
+	kafkatest.CreateTopic(t, "warehouse.asrs-control.analytics")
+	vars := map[string]string{"KAFKA_BROKERS": strings.Join(brokers, ","), "MQTT_URL": mqURL, "ASRS_LAYOUT_FILE": layoutFile,
 		"OUTBOX_INTERVAL_MS": "100"}
 	cfg, err := loadConfig(func(k string) string { return vars[k] })
 	if err == nil {

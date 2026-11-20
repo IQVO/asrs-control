@@ -1,6 +1,10 @@
 //go:build integration
 
-// Package kafkatest boots ONE Kafka broker per test binary (testcontainers; topics auto-create).
+// Package kafkatest boots ONE Kafka broker per test binary (testcontainers). Topic
+// auto-creation is OFF (the fleet convention, as in outbound-shipping's kafkatest): confluent
+// local auto-creates a topic on first produce with an unverified partition count, so a reader
+// of partition 0 can silently miss messages that hashed elsewhere. A test creates its topics
+// explicitly with CreateTopic (one partition, leader awaited) before the service writes.
 package kafkatest
 
 import (
@@ -11,6 +15,7 @@ import (
 	"time"
 
 	kafkago "github.com/segmentio/kafka-go"
+	"github.com/testcontainers/testcontainers-go"
 	tckafka "github.com/testcontainers/testcontainers-go/modules/kafka"
 )
 
@@ -25,7 +30,8 @@ func Brokers(t *testing.T) []string {
 	t.Helper()
 	once.Do(func() {
 		ctx := context.Background()
-		c, err := tckafka.Run(ctx, "confluentinc/confluent-local:7.6.1", tckafka.WithClusterID("asrs-control-itest"))
+		c, err := tckafka.Run(ctx, "confluentinc/confluent-local:7.6.1", tckafka.WithClusterID("asrs-control-itest"),
+			testcontainers.WithEnv(map[string]string{"KAFKA_AUTO_CREATE_TOPICS_ENABLE": "false"}))
 		if err != nil {
 			errStart = err
 			return
@@ -36,6 +42,29 @@ func Brokers(t *testing.T) []string {
 		t.Fatalf("start kafka: %v", errStart)
 	}
 	return brokers
+}
+
+// CreateTopic creates a one-partition topic and waits for its leader (CreateTopics returns
+// before the broker is done; producing or reading before the leader exists is the
+// unknown-topic race that once lost this suite its first CI run).
+func CreateTopic(t *testing.T, topic string) {
+	t.Helper()
+	conn, err := kafkago.Dial("tcp", Brokers(t)[0])
+	if err != nil {
+		t.Fatalf("dial broker: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	if err := conn.CreateTopics(kafkago.TopicConfig{Topic: topic, NumPartitions: 1, ReplicationFactor: 1}); err != nil {
+		t.Fatalf("create topic %s: %v", topic, err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		if parts, err := conn.ReadPartitions(topic); err == nil && len(parts) == 1 && parts[0].Leader.ID != 0 {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatalf("topic %s never got a leader", topic)
 }
 
 // Message is one record read back.
@@ -56,10 +85,14 @@ func ReadAll(t *testing.T, topic string, until func([]Message) bool, timeout tim
 	for !until(out) {
 		m, err := r.ReadMessage(ctx)
 		if errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("read %s: %d messages before the timeout, the condition never held", topic, len(out))
+			keys := make([]string, len(out))
+			for i, m := range out {
+				keys[i] = m.Key
+			}
+			t.Fatalf("read %s: %d messages before the timeout, the condition never held; keys read: %v", topic, len(out), keys)
 		}
 		if err != nil {
-			time.Sleep(200 * time.Millisecond) // the topic may not exist yet
+			time.Sleep(200 * time.Millisecond)
 			continue
 		}
 		h := map[string]string{}
