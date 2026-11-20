@@ -171,6 +171,17 @@ func (e *e2e) dumpOutbox() {
 	var held, total int
 	_ = conn.QueryRow(ctx, `SELECT count(*) FILTER (WHERE convert_from(value, 'UTF8') LIKE '%"state":"HELD"%'), count(*) FROM outbox_events`).Scan(&held, &total)
 	e.t.Logf("outbox HELD-bearing rows=%d of %d", held, total)
+	acts, err := conn.Query(ctx, `SELECT pid, state, coalesce(wait_event_type::text,''), coalesce(wait_event::text,''), coalesce(xact_start::text,''), left(coalesce(query,''), 90) FROM pg_stat_activity WHERE datname = current_database() ORDER BY xact_start NULLS LAST`)
+	if err == nil {
+		for acts.Next() {
+			var pid int
+			var st, wet, we, xs, q string
+			if err := acts.Scan(&pid, &st, &wet, &we, &xs, &q); err == nil {
+				e.t.Logf("pg pid=%d state=%s wait=%s/%s xact_start=%s q=%q", pid, st, wet, we, xs, q)
+			}
+		}
+		acts.Close()
+	}
 	stuck, err := conn.Query(ctx, `SELECT id, event_type, attempts, published_at IS NOT NULL, coalesce(last_error, '') FROM outbox_events WHERE attempts > 0 OR published_at IS NULL ORDER BY id`)
 	if err == nil {
 		for stuck.Next() {
