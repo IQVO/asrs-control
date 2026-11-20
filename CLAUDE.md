@@ -28,7 +28,7 @@ one MQTT link per AS/RS, the outbox relay).
    local copies (`.claude/rules/fleet/context-boundaries.md`).
 5. **An ADR comes first** for a new cross-context contract or any auth.
    This repo's own rules: (a) the PLC contract is AS/RS telegram protocol v1 of IQVO/equipment-emulator
-   (docs/telegram-protocol.md there), Conformist: never change the wire shape here; (b) at most ONE job per aisle
+   (docs/telegram-protocol.md there; asrs-control's side is in apis/asyncapi.yaml), Conformist: never change the wire shape here; (b) at most ONE job per aisle
    unit is in the PLC at a time, and every write locks its aisle (ADR 0002); (c) paho callbacks only enqueue; one
    worker per MQTT link handles up telegrams and retransmit expiries in order; (d) no rack position, reshuffle or
    internal move leaves this context, in REST or in events; (e) one replica only.
@@ -73,6 +73,12 @@ are optional. Run the emulator beside it for a PLC.
   `.claude/memory/MEMORY.md`: this repo's own durable heuristics.
 - `docs/before-first-release.md`: packaging checklist to finish before the first develop -> main release.
   ADRs are in docs/adr (index.md).
+- `docs/`: the Docusaurus site (pages in `docs/docs/`, ADRs served in place from `docs/adr`), built by
+  `.github/workflows/docs.yml` and published from `main` to https://iqvo.github.io/asrs-control/. After any change to
+  `apis/openapi.yaml` run `cd docs && npm ci && npm run clean-api-docs asrs-control && npm run gen-api-docs asrs-control`
+  and commit `docs/docs/api-reference/rest/` (the `docs-api-drift` CI job fails otherwise); `npm run build` must pass.
+- `apis/asyncapi.yaml` holds BOTH the Kafka CloudEvents channels and the MQTT telegram channels
+  (`asrs/v1/{asrsId}/down|up`, server `plc-link`); the telegram channels mirror equipment-emulator's spec.
 
 harness-template: v4
 
