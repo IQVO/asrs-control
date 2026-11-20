@@ -27,6 +27,7 @@ Feature: asrs-control stores, retrieves and reshuffles containers in a double-de
     Then the job of "A" is "DONE"
     And 1 "ContainerPresentedAtPort" event was published
     And the only events naming "C" are "ContainerStored"
+    And 3 "ContainerStored" events were published
 
   Scenario: retrieves to one port are presented in request order
     Given containers "A" and "B" are stored through "IN1"
