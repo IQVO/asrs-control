@@ -9,8 +9,9 @@ container sit inside the AS/RS, and which shuttle-and-lift job runs next?". It o
 port presentation order, reshuffles, PackML equipment state and capacity facts. It does NOT own container contents
 or the stock ledger (inventory-storage), which container moves when (fulfillment-execution, wes-work-planning via
 material-flow-control), transport beyond its ports (material-flow-control, amr-fleet-control) or the AS/RS as a
-building location (facility-layout). Richest aggregate: package `storagejob`. One binary: `cmd/api` (REST on :8080,
-one MQTT link per AS/RS, the outbox relay).
+building location (facility-layout). Richest aggregate: package `storagejob`. Binaries: `cmd/api` (REST on :8080,
+one MQTT link per AS/RS, the outbox relay), and the read-only agent surfaces `cmd/mcp` (MCP, :8090) and `cmd/a2a` (A2A,
+:8093) over the same read use cases (ADR 0005; no write tool or skill without a new ADR, `TestAgentSurfacesAreReadOnly`).
 
 ## Hard rules (each one cost an incident or is fitness-tested)
 
