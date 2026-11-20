@@ -71,10 +71,19 @@ ContainerPresentedAtPort, StorageJobFailed (storagejob), EquipmentStateChanged (
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `OUTBOX_INTERVAL_MS` / `OUTBOX_BATCH` / `OUTBOX_MAX_ATTEMPTS` | `250` / `100` / `20` | relay tuning |
 | `VELOCITY_WINDOW_HOURS` / `VELOCITY_FAST_RETRIEVALS` | `168` / `3` | FAST/SLOW classification |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | empty (telemetry off) | Collector OTLP/gRPC endpoint, `host:port` or URL |
+| `OTEL_SERVICE_NAME` / `SERVICE_VERSION` / `ENVIRONMENT` | `asrs-control` / `dev` / `local` | `service.name`, `service.version`, `deployment.environment.name` |
 
 ## Observability
 
-JSON logs on stdout (`log/slog`). OpenTelemetry traces and metrics are not wired yet (ADR 0001).
+The fleet OpenTelemetry standard ([ADR 0004](docs/adr/0004-adopt-the-fleet-opentelemetry-standard.md)): OTLP/gRPC traces
+and metrics to the Collector when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (empty = telemetry off), JSON logs on stdout with
+`trace_id`/`span_id`. Spans: a server span per REST route (otelchi), one per MQTT telegram
+(`asrs/v1/<asrsId>/down publish`, `asrs/v1/<asrsId>/up process`; telegram id and type only), and one
+`<topic> publish` per outbox row (the stored `traceparent` links it to the request or telegram that wrote it). Metrics:
+`http.server.request.duration`, Go runtime, `asrs_control.storage_jobs.{accepted,completed,failed}`,
+`asrs_control.storage_job.duration`, `asrs_control.telegrams.retransmitted`, `asrs_control.outbox.{backlog,lag}`. Details:
+[Observability](docs/docs/operations/observability.md).
 
 ## API
 

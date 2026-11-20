@@ -162,7 +162,6 @@ specs, chart render and selector tests. CI: `.github/workflows/ci.yml`; the docs
 
 ## Planned, not built
 
-- The fleet OpenTelemetry standard (traces, metrics, `traceparent` on Kafka): logs are JSON `log/slog` only (ADR 0001).
 - An MCP server and an A2A adapter, with the fleet agent authority levels.
 - Kong/Gateway API routes in the chart, registration in warehouse-infra, a first release (no `main` yet).
 - Measured mutation thresholds in `.gremlins.yaml`.

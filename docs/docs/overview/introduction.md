@@ -61,9 +61,10 @@ internal move ever leaves the context.
 
 Built on `develop` (2026-11-20, PR #2): the REST subsystem-controller interface, telegram protocol v1 over MQTT, five
 CloudEvents types on `warehouse.asrs-control.events` and `.analytics`, Postgres persistence with a transactional outbox,
-the Helm chart. Planned and **not built**: the fleet OpenTelemetry standard (logs are JSON `slog` only, [ADR
-0001](/docs/adr/0001-asrs-control-bounded-context)), an MCP server and an A2A adapter, Kong routes in the chart, the
-registration in warehouse-infra, and a protocol v2 job-state query (the known limits of ADR 0002).
+the Helm chart, and the fleet OpenTelemetry standard (traces, metrics, trace-correlated logs,
+[ADR 0004](/docs/adr/0004-adopt-the-fleet-opentelemetry-standard)). Planned and **not built**: an MCP server and an A2A
+adapter, Kong routes in the chart, the registration in warehouse-infra, and a protocol v2 job-state query (the known limits
+of ADR 0002).
 
 ## Read next
 

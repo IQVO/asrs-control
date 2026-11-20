@@ -26,6 +26,10 @@ unparsable or out-of-range number falls back to its default.
 | `OUTBOX_MAX_ATTEMPTS` | `20` (min 0) | publish attempts per row before it is parked | `config.outboxMaxAttempts` |
 | `VELOCITY_WINDOW_HOURS` | `168` (min 1) | window for counting a container's DONE retrieves | `config.velocityWindowHours` |
 | `VELOCITY_FAST_RETRIEVALS` | `3` (min 1) | that many retrieves in the window make a container FAST | `config.velocityFastRetrievals` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | empty: telemetry off | Collector OTLP/gRPC endpoint, `host:port` or URL ([ADR 0004](/docs/adr/0004-adopt-the-fleet-opentelemetry-standard)) | `otel.endpoint`, rendered while `otel.enabled` |
+| `OTEL_SERVICE_NAME` | `asrs-control` | `service.name` of spans and metrics | `otel.serviceName`, rendered while `otel.enabled` |
+| `SERVICE_VERSION` | `dev` | `service.version` | `serviceVersion` (empty: `image.tag`, then `appVersion`) |
+| `ENVIRONMENT` | `local` | `deployment.environment.name` (read by the telemetry adapter) | `environment` |
 
 ## The layout file
 
@@ -57,5 +61,6 @@ stored in Postgres.
 `layout.yaml`, mounted read-only at the directory of `config.layoutFile`), a Secret for `DATABASE_URL` when
 `database.url` is set, and a ServiceAccount. The chart refuses to render without a database source, `kafka.brokers` or
 `mqtt.url`, with `replicaCount` other than 1 (the single scheduler, ADR 0002), or with
-`terminationGracePeriodSeconds` below 15. The rollout strategy is `Recreate`. `extraEnv` adds variables.
+`terminationGracePeriodSeconds` below 15. The rollout strategy is `Recreate`. `extraEnv` adds variables, except the four
+observability names the chart renders itself (it refuses them).
 `ci/default-values.yaml` and `ci/all-components-values.yaml` are the lint fixtures.

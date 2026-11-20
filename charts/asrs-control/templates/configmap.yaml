@@ -18,5 +18,11 @@ data:
   OUTBOX_MAX_ATTEMPTS: {{ .Values.config.outboxMaxAttempts | quote }}
   VELOCITY_WINDOW_HOURS: {{ .Values.config.velocityWindowHours | quote }}
   VELOCITY_FAST_RETRIEVALS: {{ .Values.config.velocityFastRetrievals | quote }}
+  ENVIRONMENT: {{ .Values.environment | quote }}
+  SERVICE_VERSION: {{ include "asrs-control.serviceVersion" . | quote }}
+  {{- if and .Values.otel.enabled .Values.otel.endpoint }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.otel.endpoint | quote }}
+  OTEL_SERVICE_NAME: {{ .Values.otel.serviceName | quote }}
+  {{- end }}
   layout.yaml: |
     {{- toYaml .Values.layout | nindent 4 }}
