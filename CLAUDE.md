@@ -59,7 +59,8 @@ make harness-test # unit-test the agent hooks
 (e.g. `config/layout.example.yaml`) are required; `MIGRATIONS_DATABASE_URL` (direct connection for the
 boot migrations, default `DATABASE_URL`), `ADDR` (default `:8080`), `LOG_LEVEL`, `MQTT_CLIENT_ID`,
 `OUTBOX_INTERVAL_MS`, `OUTBOX_BATCH`, `OUTBOX_MAX_ATTEMPTS`, `VELOCITY_WINDOW_HOURS`, `VELOCITY_FAST_RETRIEVALS`
-are optional. Run the emulator beside it for a PLC.
+and the telemetry variables `OTEL_EXPORTER_OTLP_ENDPOINT` (empty = telemetry off), `OTEL_SERVICE_NAME`,
+`SERVICE_VERSION`, `ENVIRONMENT` (ADR 0004) are optional. Run the emulator beside it for a PLC.
 
 ## Where things are written down (read before editing the matching area)
 
