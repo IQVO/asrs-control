@@ -171,6 +171,18 @@ func (e *e2e) dumpOutbox() {
 	var held, total int
 	_ = conn.QueryRow(ctx, `SELECT count(*) FILTER (WHERE convert_from(value, 'UTF8') LIKE '%"state":"HELD"%'), count(*) FROM outbox_events`).Scan(&held, &total)
 	e.t.Logf("outbox HELD-bearing rows=%d of %d", held, total)
+	stuck, err := conn.Query(ctx, `SELECT id, event_type, attempts, published_at IS NOT NULL, coalesce(last_error, '') FROM outbox_events WHERE attempts > 0 OR published_at IS NULL ORDER BY id DESC LIMIT 6`)
+	if err == nil {
+		for stuck.Next() {
+			var id, attempts int
+			var typ, lastErr string
+			var published bool
+			if err := stuck.Scan(&id, &typ, &attempts, &published, &lastErr); err == nil {
+				e.t.Logf("outbox row id=%d %s attempts=%d published=%v last_error=%q", id, typ, attempts, published, lastErr)
+			}
+		}
+		stuck.Close()
+	}
 }
 
 func (e *e2e) call(method, url, body, key string) (int, map[string]any, http.Header) {

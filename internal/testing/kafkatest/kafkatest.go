@@ -10,6 +10,8 @@ package kafkatest
 import (
 	"context"
 	"errors"
+	"os"
+	"runtime/pprof"
 	"sync"
 	"testing"
 	"time"
@@ -85,6 +87,9 @@ func ReadAll(t *testing.T, topic string, until func([]Message) bool, timeout tim
 	for !until(out) {
 		m, err := r.ReadMessage(ctx)
 		if errors.Is(err, context.DeadlineExceeded) {
+			// Name the hang, wherever it is: the relay/sender has wedged with row locks
+			// held in other CI rounds and no error ever surfaced.
+			_ = pprof.Lookup("goroutine").WriteTo(os.Stderr, 2)
 			keys := make([]string, len(out))
 			for i, m := range out {
 				keys[i] = m.Key
