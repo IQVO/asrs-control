@@ -10,18 +10,23 @@ import (
 	kafkago "github.com/segmentio/kafka-go"
 )
 
+// batchTimeout is the writer's BatchTimeout. The outbox relay sends one row per
+// WriteMessages call and keeps its claim transaction open for the whole pass, so
+// kafka-go's default (1s, waiting for a batch of 100 that never fills) was paid per
+// ROW: the relay drained one event per second, the e2e's 66 rows took over a minute
+// and its read window closed before the HELD event's turn (CI, 2026-11-20 — the
+// "wedge" goroutine snapshots were healthy passes between one-second sends). 10ms
+// flushes a lone row at once and still batches a concurrent burst.
+const batchTimeout = 10 * time.Millisecond
+
 // NewWriter builds the shared Kafka writer. RequiredAcks is All and the key
 // balancer is Hash, so every event of one aggregate lands on one partition in
 // order (the aggregate id is the message key). AllowAutoTopicCreation matches
 // the broker, which creates business topics on first write. WriteTimeout and
-// ReadTimeout bound a stalled broker connection: without them one half-open
-// TCP connection made WriteMessages block forever while the outbox relay held
-// its row locks — passes went silent and events rotted unpublished (CI e2e,
-// 2026-11-20). A timed-out write returns an error, the row's failure is
-// recorded and the next pass re-dials. MaxAttempts 2 bounds a dead route:
-// kafka-go retries one batch internally up to ten times with the full request
-// deadline each, so a broken topic route could hold a single send (and, in id
-// order, every row behind it) for 100+ seconds with no error surfaced.
+// ReadTimeout bound a stalled broker connection, and MaxAttempts 2 bounds
+// kafka-go's internal retries of one batch (the default 10, each with the full
+// request deadline), so a failing send surfaces as an error within the relay
+// sink's deadline: the row's failure is recorded and the next pass retries.
 func NewWriter(brokers string) *kafkago.Writer {
 	return &kafkago.Writer{
 		Addr:                   kafkago.TCP(splitBrokers(brokers)...),
@@ -31,13 +36,7 @@ func NewWriter(brokers string) *kafkago.Writer {
 		WriteTimeout:           10 * time.Second,
 		ReadTimeout:            10 * time.Second,
 		MaxAttempts:            2,
-		// BatchTimeout: the relay sends one outbox row per WriteMessages call, so
-		// kafka-go's default 1s batch wait was paid per ROW — 66 rows took over a
-		// minute while the transaction held every claimed row (the e2e's read
-		// window expired before the last rows' turn; every "wedge" snapshot was a
-		// healthy pass between one-second sends). 50ms keeps per-row latency tiny;
-		// batching is pointless at this service's volume.
-		BatchTimeout: 50 * time.Millisecond,
+		BatchTimeout:           batchTimeout,
 	}
 }
 
