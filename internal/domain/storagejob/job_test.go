@@ -60,13 +60,22 @@ func TestNewJobsStartQueuedWithTheirSpec(t *testing.T) {
 		s.Aisle() != 1 || s.ContainerID() != "C1" {
 		t.Fatalf("store = %+v", s.State())
 	}
-	if s.PortID() != "IN1" || s.Reference() != "leg-9" || s.To() != at(1, 2, 2) || !s.From().IsZero() ||
-		!s.AcceptedAt().Equal(t0) || !s.EndedAt().IsZero() {
+	if s.PortID() != "IN1" || s.Reference() != "leg-9" || s.To() != at(1, 2, 2) || !s.From().IsZero() {
 		t.Fatalf("store = %+v", s.State())
 	}
+	if !s.AcceptedAt().Equal(t0) || !s.EndedAt().IsZero() {
+		t.Fatalf("store = %+v", s.State())
+	}
+}
+
+func TestAQueuedStoreIsExternalOpenAndNotInFlight(t *testing.T) {
+	s := mustStore(t)
 	if !s.External() || !s.Open() || s.InFlight() {
 		t.Error("a queued store is external, open and not in flight")
 	}
+}
+
+func TestNewRetrieveAndReshuffleStartQueued(t *testing.T) {
 	r := mustRetrieve(t)
 	if r.Kind() != storagejob.Retrieve || !r.From().IsZero() {
 		t.Fatalf("retrieve = %+v", r.State())
