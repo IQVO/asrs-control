@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	pahomqtt "github.com/eclipse/paho.mqtt.golang"
@@ -43,6 +44,7 @@ type Link struct {
 	log    *slog.Logger
 	pub    func(topic string, payload []byte) error
 	client pahomqtt.Client
+	start  sync.Once
 }
 
 // NewLink connects the link's client and subscribes the up topic on every (re)connection.
@@ -82,6 +84,10 @@ func (l *Link) handler() pahomqtt.MessageHandler {
 
 // Start runs the worker and the retransmit ticker until ctx ends.
 func (l *Link) Start(ctx context.Context) {
+	l.start.Do(func() { l.startWorkers(ctx) })
+}
+
+func (l *Link) startWorkers(ctx context.Context) {
 	go l.inbox.drain(ctx)
 	go l.runRetransmit(ctx)
 }
@@ -169,19 +175,21 @@ func (l *Link) runRetransmit(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			l.retransmitDue()
+			l.retransmitDue(ctx)
 		}
 	}
 }
 
-// retransmitDue resends due telegrams and queues each expiry for the worker.
-func (l *Link) retransmitDue() {
+// retransmitDue resends due telegrams and queues each expiry for the worker. The ticker is not a
+// paho callback, so it may wait for room: an expiry is already marked in the retransmitter and
+// would never be reported again if it were dropped.
+func (l *Link) retransmitDue(ctx context.Context) {
 	resend, expired := l.retx.Due(l.wall())
 	for _, t := range resend {
 		l.send(t, false)
 	}
 	for _, t := range expired {
-		l.inbox.offer(func(ctx context.Context) { l.expire(ctx, t) })
+		l.inbox.put(ctx, func(ctx context.Context) { l.expire(ctx, t) })
 	}
 }
 

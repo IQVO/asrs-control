@@ -51,3 +51,14 @@ func TestAckStopsRetransmissionAndReturnsTheTelegram(t *testing.T) {
 		t.Fatal("a re-tracked telegram kept its old deadline")
 	}
 }
+
+func TestForgetRemovesOnlyAnExpiredTelegram(t *testing.T) {
+	r := telegram.NewRetransmitter(2*time.Second, 3)
+	r.Track(telegram.Telegram{ID: "t1"}, t0)
+	if r.Forget("t1") {
+		t.Fatal("Forget removed a telegram that never expired")
+	}
+	if _, ok := r.Ack("t1"); !ok {
+		t.Fatal("the live telegram was lost")
+	}
+}

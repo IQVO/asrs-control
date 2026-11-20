@@ -74,6 +74,14 @@ func (b *inbox) offer(t task) {
 	}
 }
 
+// put enqueues, waiting for room until ctx ends. For callers that are not paho callbacks.
+func (b *inbox) put(ctx context.Context, t task) {
+	select {
+	case b.ch <- t:
+	case <-ctx.Done():
+	}
+}
+
 // drain runs queued tasks in order until ctx ends.
 func (b *inbox) drain(ctx context.Context) {
 	for {

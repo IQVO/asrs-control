@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -172,7 +173,7 @@ func TestNotReadyIsResentNeverAnOutcome(t *testing.T) {
 		t.Fatalf("NOT_READY or a STATE_REQUEST ACK reached the application: %+v", r.up.acks)
 	}
 	r.wall = t0.Add(2 * time.Second)
-	r.l.retransmitDue()
+	r.l.retransmitDue(context.Background())
 	if len(r.sent) != 3 || r.sent[2].ID != "t2" {
 		t.Fatalf("the NOT_READY telegram was not resent: %+v", r.sent)
 	}
@@ -185,7 +186,7 @@ func TestAFailedAckIsResentSoThePLCAnswersAgain(t *testing.T) {
 	yes := true
 	r.deliver(t, telegram.Telegram{ID: "a1", Type: telegram.Ack, AckOf: "t1", Accepted: &yes})
 	r.wall = t0.Add(2 * time.Second)
-	r.l.retransmitDue()
+	r.l.retransmitDue(context.Background())
 	if len(r.sent) != 2 || r.sent[1].ID != "t1" {
 		t.Fatalf("the command was not tracked again: %+v", r.sent)
 	}
@@ -197,7 +198,7 @@ func TestAnExpiryRunsOnTheWorkerAndLosesToAnEarlierAck(t *testing.T) {
 	r.l.Send(context.Background(), telegrams.Command{TelegramID: "t2", Type: telegrams.CmdCancel, JobID: "sj-2"})
 	for i := 1; i <= 4; i++ {
 		r.wall = t0.Add(time.Duration(2*i) * time.Second)
-		r.l.retransmitDue()
+		r.l.retransmitDue(context.Background())
 	}
 	if len(r.sent) != 8 || len(r.up.expired) != 0 {
 		t.Fatalf("sent %d (want 2 + 3x2 resends), expired %v before the worker ran", len(r.sent), r.up.expired)
@@ -229,16 +230,103 @@ func TestASendWhileDisconnectedIsStillTrackedAndExpires(t *testing.T) {
 	r.l.Send(context.Background(), telegrams.Command{TelegramID: "t1", Type: telegrams.CmdCancel, JobID: "sj-1"})
 	for i := 1; i <= MaxRetransmits+1; i++ {
 		r.wall = t0.Add(time.Duration(i) * RetransmitAfter)
-		r.l.retransmitDue()
+		r.l.retransmitDue(context.Background())
 	}
 	r.runQueued()
 	if len(r.up.expired) != 1 || r.up.expired[0] != "t1" {
 		t.Fatalf("expired = %v, want t1 once", r.up.expired)
 	}
 	r.wall = t0.Add(time.Hour)
-	r.l.retransmitDue()
+	r.l.retransmitDue(context.Background())
 	r.runQueued()
 	if len(r.up.expired) != 1 {
 		t.Fatalf("expired twice: %v", r.up.expired)
+	}
+}
+
+func (r *rig) expiredIDs() []string {
+	r.up.mu.Lock()
+	defer r.up.mu.Unlock()
+	return append([]string(nil), r.up.expired...)
+}
+
+func TestAnExpiryIsNotLostWhenTheInboxIsFull(t *testing.T) {
+	r := newRig(t)
+	r.l.inbox = newInbox(1, "test", slog.Default())
+	r.l.Send(context.Background(), telegrams.Command{TelegramID: "t1", Type: telegrams.CmdCancel, JobID: "sj-1"})
+	for i := 1; i <= MaxRetransmits; i++ {
+		r.wall = t0.Add(time.Duration(i) * RetransmitAfter)
+		r.l.retransmitDue(context.Background())
+	}
+	r.l.inbox.offer(func(context.Context) {}) // the inbox is now full
+	r.wall = t0.Add(time.Duration(MaxRetransmits+1) * RetransmitAfter)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { r.l.retransmitDue(ctx); close(done) }()
+	select {
+	case <-done:
+		t.Fatal("retransmitDue dropped the expiry instead of waiting for room")
+	case <-time.After(100 * time.Millisecond):
+	}
+	go r.l.inbox.drain(ctx)
+	<-done
+	deadline := time.Now().Add(2 * time.Second)
+	for len(r.expiredIDs()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := r.expiredIDs(); len(got) != 1 || got[0] != "t1" {
+		t.Fatalf("expired = %v, want t1 exactly once", got)
+	}
+}
+
+func TestAStaleQueuedExpiryDoesNotRemoveAReTrackedTelegram(t *testing.T) {
+	r := newRig(t)
+	r.l.Send(context.Background(), telegrams.Command{TelegramID: "t1", Type: telegrams.CmdCancel, JobID: "sj-1"})
+	for i := 1; i <= MaxRetransmits+1; i++ {
+		r.wall = t0.Add(time.Duration(i) * RetransmitAfter)
+		r.l.retransmitDue(context.Background()) // the last one queues the expiry
+	}
+	no := false
+	r.deliver(t, telegram.Telegram{ID: "a1", Type: telegram.Ack, AckOf: "t1", Accepted: &no, Reason: "NOT_READY"}) // re-tracks t1
+	r.runQueued()                                                                                                  // the stale expiry runs
+	if got := r.expiredIDs(); len(got) != 0 {
+		t.Fatalf("a stale expiry fired for a re-tracked telegram: %v", got)
+	}
+	before := len(r.sent)
+	r.wall = r.wall.Add(RetransmitAfter)
+	r.l.retransmitDue(context.Background())
+	if len(r.sent) != before+1 || r.sent[before].ID != "t1" {
+		t.Fatal("the re-tracked telegram was removed")
+	}
+}
+
+func TestStartTwiceRunsOneWorker(t *testing.T) {
+	r := newRig(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	r.l.Start(ctx)
+	r.l.Start(ctx)
+	var running, maxRunning, done atomic.Int32
+	for i := 0; i < 20; i++ {
+		r.l.inbox.offer(func(context.Context) {
+			n := running.Add(1)
+			for {
+				m := maxRunning.Load()
+				if n <= m || maxRunning.CompareAndSwap(m, n) {
+					break
+				}
+			}
+			time.Sleep(2 * time.Millisecond)
+			running.Add(-1)
+			done.Add(1)
+		})
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for done.Load() < 20 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if maxRunning.Load() != 1 {
+		t.Fatalf("%d tasks ran at once: a second worker was started", maxRunning.Load())
 	}
 }

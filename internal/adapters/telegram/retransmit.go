@@ -45,13 +45,17 @@ func (r *Retransmitter) Ack(id string) (Telegram, bool) {
 	return p.t, true
 }
 
-// Forget removes an expired telegram; it reports whether one was still tracked.
+// Forget removes a telegram that was reported expired; it reports whether it did. A telegram
+// that was acknowledged or re-tracked since its expiry was queued is left alone.
 func (r *Retransmitter) Forget(id string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	_, ok := r.items[id]
+	p, ok := r.items[id]
+	if !ok || !p.expired {
+		return false
+	}
 	delete(r.items, id)
-	return ok
+	return true
 }
 
 // Due returns the telegrams to resend now and those that just ran out of attempts.
