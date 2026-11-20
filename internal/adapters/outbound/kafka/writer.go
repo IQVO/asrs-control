@@ -5,6 +5,7 @@ package kafka
 
 import (
 	"strings"
+	"time"
 
 	kafkago "github.com/segmentio/kafka-go"
 )
@@ -12,13 +13,20 @@ import (
 // NewWriter builds the shared Kafka writer. RequiredAcks is All and the key
 // balancer is Hash, so every event of one aggregate lands on one partition in
 // order (the aggregate id is the message key). AllowAutoTopicCreation matches
-// the broker, which creates business topics on first write.
+// the broker, which creates business topics on first write. WriteTimeout and
+// ReadTimeout bound a stalled broker connection: without them one half-open
+// TCP connection made WriteMessages block forever while the outbox relay held
+// its row locks — passes went silent and events rotted unpublished (CI e2e,
+// 2026-11-20). A timed-out write returns an error, the row's failure is
+// recorded and the next pass re-dials.
 func NewWriter(brokers string) *kafkago.Writer {
 	return &kafkago.Writer{
 		Addr:                   kafkago.TCP(splitBrokers(brokers)...),
 		RequiredAcks:           kafkago.RequireAll,
 		Balancer:               &kafkago.Hash{},
 		AllowAutoTopicCreation: true,
+		WriteTimeout:           10 * time.Second,
+		ReadTimeout:            10 * time.Second,
 	}
 }
 

@@ -169,7 +169,7 @@ func (e *e2e) dumpOutbox() {
 		ures.Close()
 	}
 	var held, total int
-	_ = conn.QueryRow(ctx, `SELECT count(*) FILTER (WHERE convert_from(value, 'UTF8') LIKE '%"state":"HELD"'), count(*) FROM outbox_events`).Scan(&held, &total)
+	_ = conn.QueryRow(ctx, `SELECT count(*) FILTER (WHERE convert_from(value, 'UTF8') LIKE '%"state":"HELD"%'), count(*) FROM outbox_events`).Scan(&held, &total)
 	e.t.Logf("outbox HELD-bearing rows=%d of %d", held, total)
 }
 
