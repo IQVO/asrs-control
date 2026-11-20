@@ -4,10 +4,10 @@ import "github.com/IQVO/asrs-control/internal/domain/layout"
 
 // CompleteStore records a store's JOB_DONE: the container now sits at its reserved position.
 func (m *Map) CompleteStore(jobID, container string, to layout.Position) error {
-	if m.reserved[to] != jobID {
+	if m.reserved[to] != jobID || m.reservedBy[to] != container {
 		return ErrNotReserved
 	}
-	delete(m.reserved, to)
+	m.unreserve(to)
 	m.place(container, to)
 	return nil
 }
@@ -17,11 +17,11 @@ func (m *Map) CompleteMove(jobID, container string, from, to layout.Position) er
 	if m.slots[from] != container {
 		return ErrNotAtPosition
 	}
-	if m.reserved[to] != jobID {
+	if m.reserved[to] != jobID || m.reservedBy[to] != container {
 		return ErrNotReserved
 	}
 	m.remove(from)
-	delete(m.reserved, to)
+	m.unreserve(to)
 	m.place(container, to)
 	delete(m.moving, container)
 	return nil
@@ -47,7 +47,7 @@ func (m *Map) CompleteRetrieve(container string, from layout.Position, port stri
 // ReleaseStore frees a store's reservation (the job failed or was cancelled).
 func (m *Map) ReleaseStore(jobID string, to layout.Position) {
 	if m.reserved[to] == jobID {
-		delete(m.reserved, to)
+		m.unreserve(to)
 	}
 }
 
@@ -77,4 +77,9 @@ func (m *Map) Pickup(port, container string) error {
 	}
 	m.presented[port] = ""
 	return nil
+}
+
+func (m *Map) unreserve(p layout.Position) {
+	delete(m.reserved, p)
+	delete(m.reservedBy, p)
 }

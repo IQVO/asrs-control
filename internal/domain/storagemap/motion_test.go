@@ -135,3 +135,38 @@ func TestReleaseMoveFreesTheTargetAndTheContainer(t *testing.T) {
 		t.Fatalf("C is still moving after the release: %v", err)
 	}
 }
+
+func TestCompleteStoreVerifiesTheReservedContainer(t *testing.T) {
+	m := storagemap.New(tiny(), 1)
+	p, _ := m.ReserveStore("j1", "A", storagemap.Slow)
+	if err := m.CompleteStore("j1", "B", p); !errors.Is(err, storagemap.ErrNotReserved) {
+		t.Fatalf("CompleteStore of another container = %v, want ErrNotReserved", err)
+	}
+	if _, ok := m.Position("B"); ok {
+		t.Fatal("a refused CompleteStore placed the container")
+	}
+}
+
+func TestCompleteRetrieveEndsTheRetrieve(t *testing.T) {
+	m := storagemap.New(tiny(), 1)
+	p := stored(t, m, "j1", "A", storagemap.Slow)
+	_ = m.ReserveRetrieve("j2", "A")
+	if _, err := m.CompleteRetrieve("A", p, "OUT1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.Snapshot().Retrieving; len(got) != 0 {
+		t.Fatalf("Retrieving after the retrieve completed = %v, want empty", got)
+	}
+}
+
+func TestReleaseMoveByAnotherJobChangesNothing(t *testing.T) {
+	m := storagemap.New(tiny(), 1)
+	stored(t, m, "j1", "A", storagemap.Slow)
+	stored(t, m, "j2", "B", storagemap.Slow)
+	stored(t, m, "j3", "C", storagemap.Slow)
+	c, _, to, _ := m.PlanReshuffle("r1", at(1, 2, 2), storagemap.Fast)
+	m.ReleaseMove("other", c, to)
+	if m.Free() != 0 || m.Snapshot().Moving[c] != "r1" {
+		t.Fatalf("another job's ReleaseMove changed the map: free=%d moving=%v", m.Free(), m.Snapshot().Moving)
+	}
+}

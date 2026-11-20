@@ -70,11 +70,14 @@ func (m *Map) ReserveStore(jobID, container string, v Velocity) (layout.Position
 	if _, in := m.where[container]; in {
 		return layout.Position{}, ErrContainerInRack
 	}
+	if m.hasPendingStore(container) || m.onPort(container) {
+		return layout.Position{}, ErrContainerBusy
+	}
 	p, err := m.Assign(v, nil)
 	if err != nil {
 		return layout.Position{}, err
 	}
-	m.reserved[p] = jobID
+	m.reserved[p], m.reservedBy[p] = jobID, container
 	return p, nil
 }
 
@@ -83,7 +86,7 @@ func (m *Map) ReserveRetrieve(jobID, container string) error {
 	if _, in := m.where[container]; !in {
 		return ErrContainerNotInRack
 	}
-	if m.retrieving[container] != "" {
+	if m.retrieving[container] != "" || m.moving[container] != "" {
 		return ErrContainerBusy
 	}
 	m.retrieving[container] = jobID
@@ -98,7 +101,7 @@ func (m *Map) PlanReshuffle(jobID string, blocked layout.Position, v Velocity) (
 	if !ok {
 		return "", none, none, ErrNotBlocked
 	}
-	if m.moving[c] != "" {
+	if m.moving[c] != "" || m.retrieving[c] != "" {
 		return "", none, none, ErrContainerBusy
 	}
 	sameSlot := func(q layout.Position) bool { return q.Level == blocked.Level && q.Slot == blocked.Slot }
@@ -106,7 +109,26 @@ func (m *Map) PlanReshuffle(jobID string, blocked layout.Position, v Velocity) (
 	if err != nil {
 		return "", none, none, err
 	}
-	m.reserved[to] = jobID
+	m.reserved[to], m.reservedBy[to] = jobID, c
 	m.moving[c] = jobID
 	return c, blocked.Front(), to, nil
+}
+
+// hasPendingStore reports whether a reservation is already held for container.
+func (m *Map) hasPendingStore(container string) bool {
+	for _, c := range m.reservedBy {
+		if c == container {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Map) onPort(container string) bool {
+	for _, c := range m.presented {
+		if c == container {
+			return true
+		}
+	}
+	return false
 }

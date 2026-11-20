@@ -42,6 +42,7 @@ type Map struct {
 	slots      map[layout.Position]string // position -> container
 	where      map[string]layout.Position // container -> position
 	reserved   map[layout.Position]string // position -> job id
+	reservedBy map[layout.Position]string // position -> container the reservation is for
 	retrieving map[string]string          // container -> retrieve job id
 	moving     map[string]string          // container -> reshuffle job id
 	presented  map[string]string          // output port -> container ("" = free)
@@ -51,7 +52,7 @@ type Map struct {
 func New(l layout.Layout, aisle int) *Map {
 	m := &Map{l: l, aisle: aisle,
 		slots: map[layout.Position]string{}, where: map[string]layout.Position{},
-		reserved: map[layout.Position]string{}, retrieving: map[string]string{},
+		reserved: map[layout.Position]string{}, reservedBy: map[layout.Position]string{}, retrieving: map[string]string{},
 		moving: map[string]string{}, presented: map[string]string{}}
 	for _, p := range l.OutputPorts(aisle) {
 		m.presented[p.ID] = ""
@@ -61,18 +62,21 @@ func New(l layout.Layout, aisle int) *Map {
 
 // Snapshot is the persisted state of a map.
 type Snapshot struct {
-	Aisle      int
-	Occupied   map[layout.Position]string
-	Reserved   map[layout.Position]string
-	Retrieving map[string]string
-	Moving     map[string]string
-	Presented  map[string]string
+	Aisle    int
+	Occupied map[layout.Position]string
+	Reserved map[layout.Position]string
+	// ReservedContainer is the container each reserved position is held for.
+	ReservedContainer map[layout.Position]string
+	Retrieving        map[string]string
+	Moving            map[string]string
+	Presented         map[string]string
 }
 
 // Snapshot copies the map's state.
 func (m *Map) Snapshot() Snapshot {
 	return Snapshot{Aisle: m.aisle, Occupied: maps.Clone(m.slots), Reserved: maps.Clone(m.reserved),
-		Retrieving: maps.Clone(m.retrieving), Moving: maps.Clone(m.moving), Presented: maps.Clone(m.presented)}
+		ReservedContainer: maps.Clone(m.reservedBy),
+		Retrieving:        maps.Clone(m.retrieving), Moving: maps.Clone(m.moving), Presented: maps.Clone(m.presented)}
 }
 
 // Rehydrate rebuilds a map and refuses a snapshot the layout cannot hold.
@@ -87,13 +91,52 @@ func Rehydrate(l layout.Layout, s Snapshot) (*Map, error) {
 	if err := m.restoreJobs(s); err != nil {
 		return nil, err
 	}
+	if err := m.restorePorts(s); err != nil {
+		return nil, err
+	}
+	if err := m.checkConsistent(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (m *Map) restorePorts(s Snapshot) error {
+	seen := map[string]bool{}
 	for port, c := range s.Presented {
 		if _, ok := m.presented[port]; !ok {
-			return nil, fmt.Errorf("%w: %s is not an output port of aisle %d", ErrCorruptSnapshot, port, s.Aisle)
+			return fmt.Errorf("%w: %s is not an output port of aisle %d", ErrCorruptSnapshot, port, s.Aisle)
+		}
+		if c != "" {
+			if _, in := m.where[c]; in || seen[c] {
+				return fmt.Errorf("%w: container %s is in the rack or on two ports", ErrCorruptSnapshot, c)
+			}
+			seen[c] = true
 		}
 		m.presented[port] = c
 	}
-	return m, nil
+	return nil
+}
+
+// checkConsistent refuses states the aggregate cannot produce: depth rules D1 and D2 broken
+// by a reservation, and a reshuffle of a container that is not in front.
+func (m *Map) checkConsistent() error {
+	for p := range m.reserved {
+		if p.Depth == 2 && (m.slots[p.Front()] != "" || m.reserved[p.Front()] != "") {
+			return fmt.Errorf("%w: %s is reserved behind an occupied or reserved front", ErrCorruptSnapshot, p)
+		}
+		if p.Depth == 1 && m.l.DoubleDeep {
+			b := p.Back()
+			if c := m.slots[b]; m.reserved[b] != "" || m.retrieving[c] != "" || m.moving[c] != "" {
+				return fmt.Errorf("%w: %s is reserved before a reserved or leaving back", ErrCorruptSnapshot, p)
+			}
+		}
+	}
+	for c := range m.moving {
+		if m.where[c].Depth != 1 {
+			return fmt.Errorf("%w: container %s is moving but not in a front position", ErrCorruptSnapshot, c)
+		}
+	}
+	return nil
 }
 
 func (m *Map) restoreSlots(s Snapshot) error {
@@ -107,10 +150,10 @@ func (m *Map) restoreSlots(s Snapshot) error {
 		m.place(c, p)
 	}
 	for p, j := range s.Reserved {
-		if !m.inAisle(p) || j == "" || m.slots[p] != "" {
+		if !m.inAisle(p) || j == "" || m.slots[p] != "" || s.ReservedContainer[p] == "" {
 			return fmt.Errorf("%w: reserved position %s", ErrCorruptSnapshot, p)
 		}
-		m.reserved[p] = j
+		m.reserved[p], m.reservedBy[p] = j, s.ReservedContainer[p]
 	}
 	return nil
 }

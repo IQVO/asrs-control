@@ -167,3 +167,44 @@ func TestPlanReshuffleWithoutRoomFails(t *testing.T) {
 		t.Fatalf("PlanReshuffle with no other slot = %v", err)
 	}
 }
+
+func TestReserveStoreRefusesAContainerWithAPendingStoreOrOnAPort(t *testing.T) {
+	m := storagemap.New(tiny(), 1)
+	if _, err := m.ReserveStore("j1", "A", storagemap.Slow); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.ReserveStore("j2", "A", storagemap.Slow); !errors.Is(err, storagemap.ErrContainerBusy) {
+		t.Fatalf("a second store of the same container = %v, want ErrContainerBusy", err)
+	}
+	m2 := storagemap.New(tiny(), 1)
+	p := stored(t, m2, "j1", "B", storagemap.Slow)
+	if _, err := m2.CompleteRetrieve("B", p, "OUT1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m2.ReserveStore("j2", "B", storagemap.Slow); !errors.Is(err, storagemap.ErrContainerBusy) {
+		t.Fatalf("a store of a container waiting on a port = %v, want ErrContainerBusy", err)
+	}
+}
+
+func TestReserveRetrieveAndReshuffleExcludeEachOther(t *testing.T) {
+	m := storagemap.New(tiny(), 1)
+	stored(t, m, "j1", "A", storagemap.Slow) // S2-D2
+	stored(t, m, "j2", "B", storagemap.Slow) // S1-D2
+	stored(t, m, "j3", "C", storagemap.Slow) // S2-D1, blocks A
+	if _, _, _, err := m.PlanReshuffle("r1", at(1, 2, 2), storagemap.Fast); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.ReserveRetrieve("j4", "C"); !errors.Is(err, storagemap.ErrContainerBusy) {
+		t.Fatalf("retrieve of a moving container = %v, want ErrContainerBusy", err)
+	}
+	m = storagemap.New(tiny(), 1)
+	stored(t, m, "j1", "A", storagemap.Slow)
+	stored(t, m, "j2", "B", storagemap.Slow)
+	stored(t, m, "j3", "C", storagemap.Slow)
+	if err := m.ReserveRetrieve("j4", "C"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := m.PlanReshuffle("r1", at(1, 2, 2), storagemap.Fast); !errors.Is(err, storagemap.ErrContainerBusy) {
+		t.Fatalf("reshuffle of a retrieving blocker = %v, want ErrContainerBusy", err)
+	}
+}

@@ -103,6 +103,24 @@ func TestSnapshotRoundTrips(t *testing.T) {
 	}
 }
 
+func reserve(s *storagemap.Snapshot, p layout.Position, job, container string) {
+	if s.ReservedContainer == nil {
+		s.ReservedContainer = map[layout.Position]string{}
+	}
+	s.Reserved[p] = job
+	s.ReservedContainer[p] = container
+}
+
+func TestRehydrateRefusesAContainerOnTwoPorts(t *testing.T) {
+	l := tiny()
+	l.Ports = append(l.Ports, layout.Port{ID: "OUT2", Aisle: 1, Kind: layout.PortOutput})
+	s := storagemap.Snapshot{Aisle: 1, Occupied: map[layout.Position]string{}, Reserved: map[layout.Position]string{},
+		Retrieving: map[string]string{}, Moving: map[string]string{}, Presented: map[string]string{"OUT1": "C", "OUT2": "C"}}
+	if _, err := storagemap.Rehydrate(l, s); !errors.Is(err, storagemap.ErrCorruptSnapshot) {
+		t.Fatalf("Rehydrate = %v, want ErrCorruptSnapshot", err)
+	}
+}
+
 func TestRehydrateRefusesAnInconsistentSnapshot(t *testing.T) {
 	base := func() storagemap.Snapshot {
 		return storagemap.Snapshot{Aisle: 1, Occupied: map[layout.Position]string{}, Reserved: map[layout.Position]string{},
@@ -122,6 +140,28 @@ func TestRehydrateRefusesAnInconsistentSnapshot(t *testing.T) {
 		"move of a missing box":        func(s *storagemap.Snapshot) { s.Moving["C"] = "j" },
 		"retrieve without a job":       func(s *storagemap.Snapshot) { s.Occupied[at(1, 1, 1)] = "C"; s.Retrieving["C"] = "" },
 		"presentation at an input":     func(s *storagemap.Snapshot) { s.Presented["IN1"] = "C" },
+		"reserved back behind an occupied front": func(s *storagemap.Snapshot) {
+			s.Occupied[at(1, 1, 1)] = "C"
+			reserve(s, at(1, 1, 2), "j", "D")
+		},
+		"reserved back behind a reserved front": func(s *storagemap.Snapshot) {
+			reserve(s, at(1, 1, 1), "j", "C")
+			reserve(s, at(1, 1, 2), "k", "D")
+		},
+		"reserved front before a leaving container": func(s *storagemap.Snapshot) {
+			s.Occupied[at(1, 1, 2)] = "C"
+			s.Retrieving["C"] = "j"
+			reserve(s, at(1, 1, 1), "k", "D")
+		},
+		"reservation without a container": func(s *storagemap.Snapshot) { s.Reserved[at(1, 1, 1)] = "j" },
+		"container in the rack and on a port": func(s *storagemap.Snapshot) {
+			s.Occupied[at(1, 1, 1)] = "C"
+			s.Presented["OUT1"] = "C"
+		},
+		"moving container at the back": func(s *storagemap.Snapshot) {
+			s.Occupied[at(1, 1, 2)] = "C"
+			s.Moving["C"] = "j"
+		},
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
