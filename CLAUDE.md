@@ -28,7 +28,7 @@ one MQTT link per AS/RS, the outbox relay).
    local copies (`.claude/rules/fleet/context-boundaries.md`).
 5. **An ADR comes first** for a new cross-context contract or any auth.
    This repo's own rules: (a) the PLC contract is AS/RS telegram protocol v1 of IQVO/equipment-emulator
-   (`docs/telegram-protocol.md` there), Conformist: never change the wire shape here; (b) at most ONE job per aisle
+   (docs/telegram-protocol.md there), Conformist: never change the wire shape here; (b) at most ONE job per aisle
    unit is in the PLC at a time, and every write locks its aisle (ADR 0002); (c) paho callbacks only enqueue; one
    worker per MQTT link handles up telegrams and retransmit expiries in order; (d) no rack position, reshuffle or
    internal move leaves this context, in REST or in events; (e) one replica only.

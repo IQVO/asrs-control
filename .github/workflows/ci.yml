@@ -164,21 +164,31 @@ jobs:
   # ============================================================
   integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     # No Postgres service container: every integration test boots its own
     # Postgres (and Kafka) via testcontainers on the runner's Docker daemon.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check out the equipment emulator the e2e test runs against (pinned commit)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: IQVO/equipment-emulator
+          ref: fa6002493542d700f9dc75d09bc386aec2e8775c
+          path: .e2e/equipment-emulator
+      - name: Build the emulator image (BuildKit)
+        run: docker build -t equipment-emulator:e2e .e2e/equipment-emulator
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
-      - name: Integration tests (testcontainers; each test boots its own Postgres/Kafka)
+      - name: Integration tests (testcontainers; Postgres, Kafka, Mosquitto, the emulator)
+        env:
+          EQUIPMENT_EMULATOR_IMAGE: equipment-emulator:e2e
         run: go test -tags=integration ./... -race -count=1
 
   # Fast, BLOCKING mutation subset: runs on every push/PR so a drop in test
   # quality (tests that execute but stop asserting) is caught immediately.
-  # Subset = ./internal/domain/storagejob, the StockUnit aggregate: the richest
-  # behavioural core in the domain (15 of the 41 domain mutants) and it
+  # Subset = ./internal/domain/storagejob, the storagejob aggregate: the richest
+  # behavioural core in the domain (29 of the 172 domain mutants) and it
   # completes in ~1 minute. Thresholds/workers/timeout come from .gremlins.yaml,
   # so this job, the scheduled `mutation` job below and `make mutation` all
   # agree. The exhaustive run stays in the `mutation` job.

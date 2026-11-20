@@ -1,0 +1,22 @@
+{{- include "asrs-control.require" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "asrs-control.fullname" . }}
+  labels:
+    {{- include "asrs-control.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+data:
+  ADDR: {{ .Values.config.addr | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  KAFKA_BROKERS: {{ .Values.kafka.brokers | quote }}
+  MQTT_URL: {{ .Values.mqtt.url | quote }}
+  MQTT_CLIENT_ID: {{ .Values.mqtt.clientId | quote }}
+  ASRS_LAYOUT_FILE: {{ .Values.config.layoutFile | quote }}
+  OUTBOX_INTERVAL_MS: {{ .Values.config.outboxIntervalMs | quote }}
+  OUTBOX_BATCH: {{ .Values.config.outboxBatch | quote }}
+  OUTBOX_MAX_ATTEMPTS: {{ .Values.config.outboxMaxAttempts | quote }}
+  VELOCITY_WINDOW_HOURS: {{ .Values.config.velocityWindowHours | quote }}
+  VELOCITY_FAST_RETRIEVALS: {{ .Values.config.velocityFastRetrievals | quote }}
+  layout.yaml: |
+    {{- toYaml .Values.layout | nindent 4 }}

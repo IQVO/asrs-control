@@ -1,0 +1,331 @@
+asyncapi: 2.6.0
+
+info:
+  title: asrs-control Domain Events
+  version: 1.0.0
+  contact:
+    name: asrs-control maintainers
+    url: https://github.com/IQVO/asrs-control
+    email: asrs-control@iqvo.example.com
+  license:
+    name: UNLICENSED
+  description: |
+    Event contract of the **asrs-control** bounded context (WCS tier, Generic, segment `wes`; ADR 0001, ADR 0003).
+    Five facts for material-flow-control's subsystem-controller interface (WCS context map relationship 5) and,
+    for `StorageJobFailed` with reason `EQUIPMENT_FAULT`, exception-management.
+
+    **Published** through a transactional outbox to `warehouse.asrs-control.events`, and the same occurrence
+    (same CloudEvents `id`, `type` and `data`) to `warehouse.asrs-control.analytics` with the `analytics`
+    `dataschema` segment. Kafka key = `subject`.
+
+    **Envelope (mandatory).** CloudEvents 1.0 structured mode, header
+    `content-type: application/cloudevents+json; charset=UTF-8`,
+    `type` = `com.warehouse.wes.asrs-control.<entity>.<EventName>`. Dispatch on the full `type`, ignore unknown
+    types, dedupe on `id`.
+
+    **Time.** `time` and every `*_at` field are asrs-control's clock. `plc_timestamp` is the PLC telegram's
+    timestamp (the emulator's simulated time), present only on facts that came from a telegram.
+
+    No rack position, reshuffle or internal move is ever published (invariant 6).
+
+servers:
+  production:
+    url: '{brokers}'
+    protocol: kafka
+    description: Fleet-shared Kafka broker (host supplied by the deployment environment).
+    variables:
+      brokers:
+        default: kafka.warehouse-systems.internal:9092
+
+tags:
+  - name: asrs-control
+    description: The asrs-control bounded context (WCS tier).
+  - name: storagejob
+    description: Events raised by the StorageJob aggregate.
+  - name: equipmentunit
+    description: Events raised by the EquipmentUnit aggregate.
+  - name: asrs
+    description: Capacity facts of a whole AS/RS.
+
+defaultContentType: application/cloudevents+json
+
+channels:
+  warehouse.asrs-control.events:
+    description: The integration topic. Written by the outbox relay; key = subject.
+    subscribe:
+      operationId: receiveAsrsControlEvents
+      summary: Receive asrs-control's facts.
+      description: Route on the full `type`. material-flow-control consumes every type (plan 04).
+      tags:
+        - name: asrs-control
+      message:
+        oneOf:
+          - $ref: '#/components/messages/ContainerStored'
+          - $ref: '#/components/messages/ContainerPresentedAtPort'
+          - $ref: '#/components/messages/StorageJobFailed'
+          - $ref: '#/components/messages/EquipmentStateChanged'
+          - $ref: '#/components/messages/AsrsCapacityChanged'
+  warehouse.asrs-control.analytics:
+    description: The analytics twin of every integration event (same id, type and data; analytics dataschema). Not an integration contract.
+    subscribe:
+      operationId: receiveAsrsControlAnalytics
+      summary: Receive the analytics twin of every asrs-control event.
+      description: Payloads are byte-for-byte the integration payloads; only the `dataschema` stream segment differs.
+      tags:
+        - name: asrs-control
+      message:
+        oneOf:
+          - $ref: '#/components/messages/ContainerStoredAnalytics'
+          - $ref: '#/components/messages/ContainerPresentedAtPort'
+          - $ref: '#/components/messages/StorageJobFailed'
+          - $ref: '#/components/messages/EquipmentStateChanged'
+          - $ref: '#/components/messages/AsrsCapacityChanged'
+
+components:
+  messages:
+    ContainerStored:
+      name: ContainerStored
+      title: Container stored
+      summary: A store job's container is in the rack.
+      description: '`type` = `com.warehouse.wes.asrs-control.storagejob.ContainerStored`; subject and key = the storage job id. The rack position is not published.'
+      contentType: application/cloudevents+json
+      tags:
+        - name: storagejob
+      payload:
+        $ref: '#/components/schemas/ContainerStoredEvent'
+      examples:
+        - name: stored
+          summary: Container C-0001 stored from input port IN1.
+          payload:
+            specversion: '1.0'
+            id: 11111111-2222-4333-8444-555555555555
+            source: /warehouse/asrs-control
+            type: com.warehouse.wes.asrs-control.storagejob.ContainerStored
+            subject: sj-7f3a
+            time: '2026-11-20T08:00:01Z'
+            datacontenttype: application/json
+            dataschema: urn:warehouse:asrs-control:events:ContainerStored:v1
+            data: {storage_job_id: sj-7f3a, asrs_id: ASRS1, container_id: C-0001, port_id: IN1, reference: leg-9, stored_at: '2026-11-20T08:00:01Z', plc_timestamp: '2026-11-20T08:09:30.5Z'}
+    ContainerStoredAnalytics:
+      name: ContainerStored
+      title: Container stored (analytics twin)
+      summary: A store job's container is in the rack, on the analytics topic.
+      description: 'The analytics twin of `ContainerStored`: same `id`, `type`, `subject` and `data`; only the `dataschema` stream segment is `analytics` (`urn:warehouse:asrs-control:analytics:ContainerStored:v1`). Not an integration contract.'
+      contentType: application/cloudevents+json
+      tags:
+        - name: storagejob
+      payload:
+        $ref: '#/components/schemas/ContainerStoredEvent'
+      examples:
+        - name: stored-analytics
+          summary: Container C-0001 stored from input port IN1 (analytics twin).
+          payload:
+            specversion: '1.0'
+            id: 11111111-2222-4333-8444-555555555555
+            source: /warehouse/asrs-control
+            type: com.warehouse.wes.asrs-control.storagejob.ContainerStored
+            subject: sj-7f3a
+            time: '2026-11-20T08:00:01Z'
+            datacontenttype: application/json
+            dataschema: urn:warehouse:asrs-control:analytics:ContainerStored:v1
+            data: {storage_job_id: sj-7f3a, asrs_id: ASRS1, container_id: C-0001, port_id: IN1, reference: leg-9, stored_at: '2026-11-20T08:00:01Z', plc_timestamp: '2026-11-20T08:09:30.5Z'}
+    ContainerPresentedAtPort:
+      name: ContainerPresentedAtPort
+      title: Container presented at port
+      summary: A retrieve job's container arrived at its output port, in request order per port.
+      description: '`type` = `com.warehouse.wes.asrs-control.storagejob.ContainerPresentedAtPort`; subject = the storage job id. `scan_result` NO_READ or MISMATCH sends the container to clarification (material-flow-control).'
+      contentType: application/cloudevents+json
+      tags:
+        - name: storagejob
+      payload:
+        $ref: '#/components/schemas/ContainerPresentedAtPortEvent'
+      examples:
+        - name: presented
+          summary: Container C-0001 presented at OUT1 and read correctly.
+          payload:
+            specversion: '1.0'
+            id: 21111111-2222-4333-8444-555555555555
+            source: /warehouse/asrs-control
+            type: com.warehouse.wes.asrs-control.storagejob.ContainerPresentedAtPort
+            subject: sj-8b21
+            time: '2026-11-20T08:05:00Z'
+            datacontenttype: application/json
+            dataschema: urn:warehouse:asrs-control:events:ContainerPresentedAtPort:v1
+            data: {storage_job_id: sj-8b21, asrs_id: ASRS1, container_id: C-0001, port_id: OUT1, scan_result: READ, scanned_container_id: C-0001, presented_at: '2026-11-20T08:05:00Z', plc_timestamp: '2026-11-20T08:55:00Z'}
+    StorageJobFailed:
+      name: StorageJobFailed
+      title: Storage job failed
+      summary: A store or retrieve job ended without its outcome, or was cancelled.
+      description: '`type` = `com.warehouse.wes.asrs-control.storagejob.StorageJobFailed`; subject = the storage job id. exception-management opens a case for reason EQUIPMENT_FAULT.'
+      contentType: application/cloudevents+json
+      tags:
+        - name: storagejob
+      payload:
+        $ref: '#/components/schemas/StorageJobFailedEvent'
+      examples:
+        - name: equipment-fault
+          summary: A queued retrieve failed because its aisle's unit was held.
+          payload:
+            specversion: '1.0'
+            id: 31111111-2222-4333-8444-555555555555
+            source: /warehouse/asrs-control
+            type: com.warehouse.wes.asrs-control.storagejob.StorageJobFailed
+            subject: sj-9c02
+            time: '2026-11-20T08:06:00Z'
+            datacontenttype: application/json
+            dataschema: urn:warehouse:asrs-control:events:StorageJobFailed:v1
+            data: {storage_job_id: sj-9c02, asrs_id: ASRS1, job_kind: RETRIEVE, container_id: C-0002, port_id: OUT1, reason: EQUIPMENT_FAULT, failed_at: '2026-11-20T08:06:00Z', plc_timestamp: '2026-11-20T09:05:00Z'}
+    EquipmentStateChanged:
+      name: EquipmentStateChanged
+      title: Equipment state changed
+      summary: An aisle's shuttle-and-lift unit changed its PackML state.
+      description: '`type` = `com.warehouse.wes.asrs-control.equipmentunit.EquipmentStateChanged`; subject = `<asrsId>/<unitId>`.'
+      contentType: application/cloudevents+json
+      tags:
+        - name: equipmentunit
+      payload:
+        $ref: '#/components/schemas/EquipmentStateChangedEvent'
+      examples:
+        - name: held
+          summary: Unit A1 went to HELD.
+          payload:
+            specversion: '1.0'
+            id: 41111111-2222-4333-8444-555555555555
+            source: /warehouse/asrs-control
+            type: com.warehouse.wes.asrs-control.equipmentunit.EquipmentStateChanged
+            subject: ASRS1/A1
+            time: '2026-11-20T08:06:00Z'
+            datacontenttype: application/json
+            dataschema: urn:warehouse:asrs-control:events:EquipmentStateChanged:v1
+            data: {asrs_id: ASRS1, unit_id: A1, aisle: 1, state: HELD, previous_state: EXECUTE, changed_at: '2026-11-20T08:06:00Z', plc_timestamp: '2026-11-20T09:05:00Z'}
+    AsrsCapacityChanged:
+      name: AsrsCapacityChanged
+      title: AS/RS capacity changed
+      summary: Units available, free positions or open jobs of an AS/RS changed.
+      description: '`type` = `com.warehouse.wes.asrs-control.asrs.AsrsCapacityChanged`; subject = the AS/RS id. Feeds material-flow-control''s SubsystemCapacityChanged.'
+      contentType: application/cloudevents+json
+      tags:
+        - name: asrs
+      payload:
+        $ref: '#/components/schemas/AsrsCapacityChangedEvent'
+      examples:
+        - name: one-unit-held
+          summary: One of two units is held.
+          payload:
+            specversion: '1.0'
+            id: 51111111-2222-4333-8444-555555555555
+            source: /warehouse/asrs-control
+            type: com.warehouse.wes.asrs-control.asrs.AsrsCapacityChanged
+            subject: ASRS1
+            time: '2026-11-20T08:06:00Z'
+            datacontenttype: application/json
+            dataschema: urn:warehouse:asrs-control:events:AsrsCapacityChanged:v1
+            data: {asrs_id: ASRS1, units_total: 2, units_available: 1, positions_total: 1280, positions_free: 1200, open_jobs: 3, measured_at: '2026-11-20T08:06:00Z'}
+
+  schemas:
+    CloudEventEnvelope:
+      type: object
+      required: [specversion, id, source, type, subject, time, datacontenttype, dataschema, data]
+      properties:
+        specversion: {type: string, const: '1.0'}
+        id: {type: string, description: UUID minted once per occurrence; consumers dedupe on it.}
+        source: {type: string, const: /warehouse/asrs-control}
+        type: {type: string, description: 'com.warehouse.wes.asrs-control.<entity>.<EventName>.'}
+        subject: {type: string}
+        time: {type: string, format: date-time}
+        datacontenttype: {type: string, const: application/json}
+        dataschema: {type: string, description: 'urn:warehouse:asrs-control:<events|analytics>:<EventName>:v1.'}
+    PlcTimestamp:
+      type: string
+      format: date-time
+      description: The PLC telegram's timestamp (simulated time in the emulator). Absent when the fact did not come from a telegram.
+    ContainerStoredEvent:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventEnvelope'
+        - type: object
+          properties:
+            type: {type: string, const: com.warehouse.wes.asrs-control.storagejob.ContainerStored}
+            data:
+              type: object
+              required: [storage_job_id, asrs_id, container_id, port_id, stored_at]
+              properties:
+                storage_job_id: {type: string}
+                asrs_id: {type: string}
+                container_id: {type: string}
+                port_id: {type: string, description: The input port.}
+                reference: {type: string, description: The caller's reference from the request, when given.}
+                stored_at: {type: string, format: date-time}
+                plc_timestamp: {$ref: '#/components/schemas/PlcTimestamp'}
+    ContainerPresentedAtPortEvent:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventEnvelope'
+        - type: object
+          properties:
+            type: {type: string, const: com.warehouse.wes.asrs-control.storagejob.ContainerPresentedAtPort}
+            data:
+              type: object
+              required: [storage_job_id, asrs_id, container_id, port_id, scan_result, presented_at]
+              properties:
+                storage_job_id: {type: string}
+                asrs_id: {type: string}
+                container_id: {type: string, description: The container the job retrieved.}
+                port_id: {type: string, description: The output port.}
+                reference: {type: string}
+                scan_result: {type: string, enum: [READ, NO_READ, MISMATCH]}
+                scanned_container_id: {type: string, description: What the port read; absent on NO_READ.}
+                presented_at: {type: string, format: date-time}
+                plc_timestamp: {$ref: '#/components/schemas/PlcTimestamp'}
+    StorageJobFailedEvent:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventEnvelope'
+        - type: object
+          properties:
+            type: {type: string, const: com.warehouse.wes.asrs-control.storagejob.StorageJobFailed}
+            data:
+              type: object
+              required: [storage_job_id, asrs_id, job_kind, container_id, port_id, reason, failed_at]
+              properties:
+                storage_job_id: {type: string}
+                asrs_id: {type: string}
+                job_kind: {type: string, enum: [STORE, RETRIEVE]}
+                container_id: {type: string}
+                port_id: {type: string}
+                reference: {type: string}
+                reason: {type: string, enum: [CANCELLED, EQUIPMENT_FAULT, EQUIPMENT_UNREACHABLE, COMMAND_REFUSED, CONTAINER_NOT_AT_PORT, STORAGE_MAP_MISMATCH, PORT_OCCUPIED, RESHUFFLE_FAILED, NO_RESHUFFLE_POSITION]}
+                plc_reason: {type: string, description: The PLC's bare reason code, when the failure came from the PLC.}
+                failed_at: {type: string, format: date-time}
+                plc_timestamp: {$ref: '#/components/schemas/PlcTimestamp'}
+    EquipmentStateChangedEvent:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventEnvelope'
+        - type: object
+          properties:
+            type: {type: string, const: com.warehouse.wes.asrs-control.equipmentunit.EquipmentStateChanged}
+            data:
+              type: object
+              required: [asrs_id, unit_id, aisle, state, previous_state, changed_at]
+              properties:
+                asrs_id: {type: string}
+                unit_id: {type: string, description: 'A<aisle>: the aisle''s combined shuttle-and-lift unit.'}
+                aisle: {type: integer, minimum: 1}
+                state: {type: string, enum: [IDLE, EXECUTE, HELD]}
+                previous_state: {type: string, enum: [IDLE, EXECUTE, HELD]}
+                changed_at: {type: string, format: date-time}
+                plc_timestamp: {$ref: '#/components/schemas/PlcTimestamp'}
+    AsrsCapacityChangedEvent:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventEnvelope'
+        - type: object
+          properties:
+            type: {type: string, const: com.warehouse.wes.asrs-control.asrs.AsrsCapacityChanged}
+            data:
+              type: object
+              required: [asrs_id, units_total, units_available, positions_total, positions_free, open_jobs, measured_at]
+              properties:
+                asrs_id: {type: string}
+                units_total: {type: integer, minimum: 1}
+                units_available: {type: integer, minimum: 0, description: Units not HELD.}
+                positions_total: {type: integer, minimum: 1}
+                positions_free: {type: integer, minimum: 0, description: Positions neither occupied nor reserved.}
+                open_jobs: {type: integer, minimum: 0, description: Store and retrieve jobs without an outcome.}
+                measured_at: {type: string, format: date-time}
