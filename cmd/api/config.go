@@ -19,6 +19,8 @@ type config struct {
 	OutboxInterval                                    time.Duration
 	OutboxBatch, OutboxMaxAttempts                    int
 	Velocity                                          usecases.VelocityPolicy
+	// Telemetry (ADR 0004): an empty OTLPEndpoint means telemetry is off.
+	ServiceName, ServiceVersion, OTLPEndpoint string
 }
 
 func loadConfig(getenv func(string) string) (config, error) {
@@ -39,7 +41,9 @@ func loadConfig(getenv func(string) string) (config, error) {
 		LogLevel: or("LOG_LEVEL", "info"), OutboxInterval: time.Duration(atLeast("OUTBOX_INTERVAL_MS", 250, 1)) * time.Millisecond,
 		OutboxBatch: atLeast("OUTBOX_BATCH", 100, 1), OutboxMaxAttempts: atLeast("OUTBOX_MAX_ATTEMPTS", 20, 0),
 		Velocity: usecases.VelocityPolicy{Window: time.Duration(atLeast("VELOCITY_WINDOW_HOURS", 168, 1)) * time.Hour,
-			FastRetrievals: atLeast("VELOCITY_FAST_RETRIEVALS", 3, 1)}}
+			FastRetrievals: atLeast("VELOCITY_FAST_RETRIEVALS", 3, 1)},
+		ServiceName: or("OTEL_SERVICE_NAME", "asrs-control"), ServiceVersion: getenv("SERVICE_VERSION"),
+		OTLPEndpoint: getenv("OTEL_EXPORTER_OTLP_ENDPOINT")}
 	for _, b := range strings.Split(getenv("KAFKA_BROKERS"), ",") {
 		if b = strings.TrimSpace(b); b != "" {
 			c.Brokers = append(c.Brokers, b)
