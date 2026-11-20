@@ -187,6 +187,8 @@ func TestTheUnclassifiedEntryCheckBites(t *testing.T) {
 // (b) For EVERY catalogue entry: the first request is answered with that problem, then the same
 // request again under the same key. By class: FINAL and OUTCOME are stored and replayed (the
 // handler ran once); RETRYABLE (and every 5xx) is not stored and runs again.
+// (The body of the template's test is split into checkFirstAnswer/checkSecondAnswer to stay
+// under this repo's complexity limits; the assertions are the fleet template's, unchanged.)
 func TestEveryProblemTypeIsReplayedOrReExecutedByItsClass(t *testing.T) {
 	for _, e := range newReplayAdapter(t).Catalogue() {
 		t.Run(e.Slug+"/"+e.Class, func(t *testing.T) {
