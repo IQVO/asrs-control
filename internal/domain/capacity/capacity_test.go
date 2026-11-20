@@ -16,6 +16,9 @@ func TestChangedOnlyWhenTheSnapshotDiffers(t *testing.T) {
 	if _, changed := capacity.Changed(s, true, s, at); changed {
 		t.Fatal("an equal snapshot is no change")
 	}
+	if _, changed := capacity.Changed(s, false, s, at); !changed {
+		t.Fatal("an unknown previous snapshot must publish even when equal")
+	}
 	for _, mut := range []func(*capacity.Snapshot){
 		func(n *capacity.Snapshot) { n.UnitsAvailable = 1 },
 		func(n *capacity.Snapshot) { n.PositionsFree = 7 },

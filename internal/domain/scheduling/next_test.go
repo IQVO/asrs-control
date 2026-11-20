@@ -154,3 +154,13 @@ func TestALaterRetrieveToTheSamePortNeverOvertakesAWaitingOne(t *testing.T) {
 	expect(t, scheduling.Next(m, idle(), open), scheduling.Dispatch, "r3")
 	expect(t, scheduling.Next(m, idle(), []*storagejob.Job{open[0], open[2]}), scheduling.None, "")
 }
+
+func TestAHeldUnitDispatchesAgainOnceReportedIdle(t *testing.T) {
+	m := storagemap.New(tiny(), 1)
+	open := []*storagejob.Job{job("j1", storagejob.Store, storagejob.Queued, "C1", "IN1", 1)}
+	u := idle()
+	u.Report(equipment.Held, t0, t0)
+	expect(t, scheduling.Next(m, u, open), scheduling.None, "")
+	u.Report(equipment.Idle, t0.Add(time.Second), t0)
+	expect(t, scheduling.Next(m, u, open), scheduling.Dispatch, "j1")
+}

@@ -66,6 +66,16 @@ func TestReportRaisesAnEventOnlyOnChange(t *testing.T) {
 	if u.Available() || !u.Snapshot().Since.Equal(at) {
 		t.Fatal("a HELD unit is not available")
 	}
+	if ev, changed := u.Report(equipment.Held, at.Add(time.Second), plc); changed || ev != (equipment.EquipmentStateChanged{}) {
+		t.Fatalf("HELD -> HELD = %+v, %v", ev, changed)
+	}
+	at2, plc2 := t0.Add(2*time.Second), t0.Add(2*time.Hour)
+	ev, changed = u.Report(equipment.Idle, at2, plc2)
+	want = equipment.EquipmentStateChanged{AsrsID: "ASRS1", UnitID: "A1", Aisle: 1, State: equipment.Idle, Previous: equipment.Held, At: at2, PLCTime: plc2}
+	if !changed || ev != want || !u.Available() || !u.Snapshot().Since.Equal(at2) {
+		t.Fatalf("HELD -> IDLE = %+v, %v", ev, changed)
+	}
+	u.Report(equipment.Held, at2, plc2)
 	back := equipment.Rehydrate(u.Snapshot())
 	if back.Snapshot() != u.Snapshot() {
 		t.Fatal("snapshot round trip")
