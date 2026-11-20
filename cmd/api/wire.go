@@ -49,10 +49,12 @@ func wire(ctx context.Context, cfg config, log *slog.Logger) (*app, error) {
 	}
 	a := &app{log: log, pool: pool, layouts: layouts, links: mqtt.Links{}, idem: postgres.NewIdempotencyStore(pool), inbox: postgres.NewTelegramInbox(pool)}
 	uow, outboxRepo := postgres.NewUnitOfWork(pool), postgres.NewOutboxRepo(pool)
+	metrics := newMetrics(log)
+	observeOutbox(log, metrics, outboxRepo.Backlog)
 	a.svc, err = usecases.New(usecases.Deps{Layouts: layouts, UoW: uow, Maps: postgres.NewStorageMapRepo(pool), Jobs: postgres.NewStorageJobRepo(pool),
 		Units: postgres.NewUnitRepo(pool), Capacity: postgres.NewCapacityRepo(pool), Telegrams: a.inbox,
 		Events: events.NewSink(outboxRepo, system.IDs{}.NewID), Downlink: a.links, Clock: system.Clock{}, IDs: system.IDs{},
-		Velocity: cfg.Velocity, Log: log})
+		Velocity: cfg.Velocity, Log: log, Metrics: jobMetrics(metrics)})
 	if err == nil {
 		err = a.svc.Prepare(ctx)
 	}
@@ -61,7 +63,8 @@ func wire(ctx context.Context, cfg config, log *slog.Logger) (*app, error) {
 		return nil, err
 	}
 	for _, l := range layouts {
-		link, err := mqtt.NewLink(cfg.MQTTURL, cfg.MQTTClientID+"-"+l.ID, l.ID, a.svc, func() time.Time { return time.Now().UTC() }, log)
+		link, err := mqtt.NewLink(cfg.MQTTURL, cfg.MQTTClientID+"-"+l.ID, l.ID, a.svc, func() time.Time { return time.Now().UTC() }, log,
+			mqtt.WithRetransmitCounter(retransmitCounter(metrics)))
 		if err != nil {
 			a.close()
 			return nil, err
@@ -76,7 +79,8 @@ func wire(ctx context.Context, cfg config, log *slog.Logger) (*app, error) {
 		inboundhttp.Dependency{Name: "kafka", Check: kafkaCheck(cfg.Brokers)},
 		inboundhttp.Dependency{Name: "mqtt", Check: func(context.Context) error { return a.links.Connected() }})
 	idem := inboundhttp.NewIdempotency(a.idem, uow, system.Clock{})
-	router := inboundhttp.NewRouter(&inboundhttp.Server{Service: a.svc, Idempotency: idem.Middleware, Readiness: a.readiness}, log)
+	router := inboundhttp.NewRouter(&inboundhttp.Server{Service: a.svc, Idempotency: idem.Middleware, Readiness: a.readiness,
+		ServiceName: cfg.ServiceName}, log)
 	a.server = &http.Server{Handler: router, ReadHeaderTimeout: 5 * time.Second}
 	return a, nil
 }

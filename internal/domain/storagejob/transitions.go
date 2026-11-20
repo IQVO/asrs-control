@@ -88,7 +88,7 @@ func (j *Job) CompleteMotion(at, plcTime time.Time) ([]any, error) {
 	case Store:
 		j.end(Done, "", "", at)
 		return []any{ContainerStored{JobID: j.s.ID, AsrsID: j.s.AsrsID, ContainerID: j.s.ContainerID, PortID: j.s.PortID,
-			Reference: j.s.Reference, At: at, PLCTime: plcTime}}, nil
+			Reference: j.s.Reference, At: at, PLCTime: plcTime, AcceptedAt: j.s.AcceptedAt}}, nil
 	default:
 		j.end(Done, "", "", at)
 		return nil, nil
@@ -109,7 +109,7 @@ func (j *Job) Present(scanned string, at, plcTime time.Time) ([]any, error) {
 	}
 	j.end(Done, "", "", at)
 	return []any{ContainerPresentedAtPort{JobID: j.s.ID, AsrsID: j.s.AsrsID, ContainerID: j.s.ContainerID, PortID: j.s.PortID,
-		Reference: j.s.Reference, Scan: scan, ScannedContainerID: scanned, At: at, PLCTime: plcTime}}, nil
+		Reference: j.s.Reference, Scan: scan, ScannedContainerID: scanned, At: at, PLCTime: plcTime, AcceptedAt: j.s.AcceptedAt}}, nil
 }
 
 // Fail ends an open job with f.
@@ -175,5 +175,6 @@ func (j *Job) failedEvent(plcTime time.Time) []any {
 		return nil
 	}
 	return []any{StorageJobFailed{JobID: j.s.ID, AsrsID: j.s.AsrsID, Kind: j.s.Kind, ContainerID: j.s.ContainerID,
-		PortID: j.s.PortID, Reference: j.s.Reference, Reason: j.s.Reason, PLCReason: j.s.PLCReason, At: j.s.EndedAt, PLCTime: plcTime}}
+		PortID: j.s.PortID, Reference: j.s.Reference, Reason: j.s.Reason, PLCReason: j.s.PLCReason, At: j.s.EndedAt, PLCTime: plcTime,
+		AcceptedAt: j.s.AcceptedAt}}
 }

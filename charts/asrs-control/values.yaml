@@ -80,6 +80,22 @@ layout:
         - {id: IN2, aisle: 2, kind: INPUT}
         - {id: OUT2, aisle: 2, kind: OUTPUT}
 
+# OpenTelemetry (ADR 0004, the fleet standard): traces and metrics over OTLP/gRPC to the
+# Collector. otel.enabled renders OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_SERVICE_NAME; disabled
+# (or an empty endpoint) means the binary installs no exporter at all and never dials one.
+otel:
+  enabled: true
+  endpoint: "otel-collector.observability.svc.cluster.local:4317"   # OTEL_EXPORTER_OTLP_ENDPOINT
+  serviceName: "asrs-control"                                         # OTEL_SERVICE_NAME
+
+# ENVIRONMENT: deployment.environment.name on every span and metric (default "local" in the binary).
+environment: "production"
+
+# SERVICE_VERSION: service.version. Empty = image.tag, then the chart appVersion.
+serviceVersion: ""
+
+# Extra env vars appended to the container. The chart refuses the names it renders itself
+# (the observability env above): set those through their values.
 extraEnv: []
 
 livenessProbe:

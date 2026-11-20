@@ -1,6 +1,7 @@
 # 1. asrs-control is a bounded context of the warehouse fleet
 
 Status: Accepted (2026-11-20). Implements the WCS strategic design (warehouse-docs `docs/wcs/asrs-control.md`).
+The "Deferred" OpenTelemetry sentence is superseded by [ADR 0004](0004-adopt-the-fleet-opentelemetry-standard.md).
 
 ## Context
 

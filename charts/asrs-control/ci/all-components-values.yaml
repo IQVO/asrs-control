@@ -45,6 +45,12 @@ layout:
       ports:
         - {id: IN1, aisle: 1, kind: INPUT}
         - {id: OUT1, aisle: 1, kind: OUTPUT}
+otel:
+  enabled: true
+  endpoint: "otel-collector.observability.svc.cluster.local:4317"
+  serviceName: "asrs-control-ci"
+environment: "ci"
+serviceVersion: "v0.0.0-ci"
 extraEnv:
   - name: GOMAXPROCS
     value: "2"

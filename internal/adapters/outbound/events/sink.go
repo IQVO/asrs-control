@@ -5,7 +5,11 @@ package events
 
 import (
 	"context"
+	"sort"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 
 	"github.com/IQVO/asrs-control/internal/adapters/kafka/cloudevents"
 	"github.com/IQVO/asrs-control/internal/application/outbox"
@@ -56,7 +60,28 @@ func (s *Sink) Append(ctx context.Context, evs ...any) error {
 			msgs = append(msgs, m)
 		}
 	}
+	if tc := traceHeaders(ctx); len(tc) > 0 {
+		for i := range msgs {
+			msgs[i].Headers = append(msgs[i].Headers, tc...)
+		}
+	}
 	return s.out.Insert(ctx, msgs...)
+}
+
+// traceHeaders is the W3C trace context (traceparent, tracestate, baggage) of the unit of work
+// that appends the events, through the global propagator: the relay's publish span continues it
+// (ADR 0004). With telemetry off the propagator is the no-op one and nothing is added, so the
+// stored rows stay byte-identical to the goldens.
+func traceHeaders(ctx context.Context) []outbox.Header {
+	c := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, c)
+	keys := c.Keys()
+	sort.Strings(keys)
+	out := make([]outbox.Header, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, outbox.Header{Key: k, Value: c.Get(k)})
+	}
+	return out
 }
 
 func encode(id string, o occurrence, stream string) (outbox.Message, error) {

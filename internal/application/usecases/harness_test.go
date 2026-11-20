@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/IQVO/asrs-control/internal/adapters/outbound/memory"
+	"github.com/IQVO/asrs-control/internal/application/ports"
 	"github.com/IQVO/asrs-control/internal/application/telegrams"
 	"github.com/IQVO/asrs-control/internal/application/usecases"
 	"github.com/IQVO/asrs-control/internal/domain/layout"
@@ -42,13 +43,20 @@ type harness struct {
 
 func newHarness(t *testing.T, l layout.Layout) *harness {
 	t.Helper()
+	return newHarnessWith(t, l, nil)
+}
+
+// newHarnessWith builds the harness with a job-metrics port (nil = none, as in production
+// when the counters failed to register).
+func newHarnessWith(t *testing.T, l layout.Layout, metrics ports.JobMetrics) *harness {
+	t.Helper()
 	st := memory.NewStore()
 	h := &harness{t: t, ctx: context.Background(), db: st, events: memory.NewEvents(st), jobs: memory.NewStorageJobs(st),
 		clock: memory.NewClock(t0), down: memory.NewDownlink()}
 	svc, err := usecases.New(usecases.Deps{Layouts: []layout.Layout{l}, UoW: memory.NewUnitOfWork(st),
 		Maps: memory.NewStorageMaps(st), Jobs: h.jobs, Units: memory.NewUnits(st), Capacity: memory.NewCapacities(st),
 		Telegrams: memory.NewTelegrams(st), Events: h.events, Downlink: h.down, Clock: h.clock, IDs: memory.NewIDs("id-"),
-		Velocity: usecases.VelocityPolicy{Window: 24 * time.Hour, FastRetrievals: 2}})
+		Velocity: usecases.VelocityPolicy{Window: 24 * time.Hour, FastRetrievals: 2}, Metrics: metrics})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,7 +9,7 @@ import (
 
 func cancelledWant(j *storagejob.Job) storagejob.StorageJobFailed {
 	return storagejob.StorageJobFailed{JobID: j.ID(), AsrsID: j.AsrsID(), Kind: j.Kind(), ContainerID: j.ContainerID(),
-		PortID: j.PortID(), Reference: j.Reference(), Reason: storagejob.ReasonCancelled, At: t1}
+		PortID: j.PortID(), Reference: j.Reference(), Reason: storagejob.ReasonCancelled, At: t1, AcceptedAt: t0}
 }
 
 func TestCancelOutcomeEventsCarryTheWholeFailure(t *testing.T) {
@@ -35,7 +35,7 @@ func TestJobDoneDuringCancelRaisesTheWholeContainerStored(t *testing.T) {
 	s := dispatched(t, mustStore(t))
 	_, _, _ = s.RequestCancel("tc", t0)
 	evs, err := s.CompleteMotion(t1, plc)
-	want := storagejob.ContainerStored{JobID: "sj-1", AsrsID: "ASRS1", ContainerID: "C1", PortID: "IN1", Reference: "leg-9", At: t1, PLCTime: plc}
+	want := storagejob.ContainerStored{JobID: "sj-1", AsrsID: "ASRS1", ContainerID: "C1", PortID: "IN1", Reference: "leg-9", At: t1, PLCTime: plc, AcceptedAt: t0}
 	if err != nil || len(evs) != 1 || evs[0] != want || s.Status() != storagejob.Done {
 		t.Fatalf("got %+v, %v, %s; want %+v", evs, err, s.Status(), want)
 	}
@@ -65,7 +65,7 @@ func TestFailFromEveryOpenStatusEmitsOneFailedEvent(t *testing.T) {
 			j := p(t)
 			evs, err := j.Fail(f)
 			want := storagejob.StorageJobFailed{JobID: j.ID(), AsrsID: "ASRS1", Kind: j.Kind(), ContainerID: "C1", PortID: j.PortID(),
-				Reference: j.Reference(), Reason: f.Reason, PLCReason: "X", At: t1, PLCTime: plc}
+				Reference: j.Reference(), Reason: f.Reason, PLCReason: "X", At: t1, PLCTime: plc, AcceptedAt: t0}
 			if err != nil || len(evs) != 1 || evs[0] != want || j.Status() != storagejob.Failed {
 				t.Fatalf("got %+v, %v, %s; want %+v", evs, err, j.Status(), want)
 			}

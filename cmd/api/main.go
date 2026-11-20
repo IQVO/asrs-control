@@ -27,6 +27,11 @@ func runMain() error {
 	}
 	log := newLogger(cfg.LogLevel)
 	slog.SetDefault(log)
+	flush, err := startTelemetry(log, cfg)
+	if err != nil {
+		return err
+	}
+	defer flush()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	a, err := wire(ctx, cfg, log)
@@ -41,15 +46,4 @@ func runMain() error {
 	return a.run(ctx, ln)
 }
 
-func newLogger(level string) *slog.Logger {
-	lv := slog.LevelInfo
-	switch level {
-	case "debug":
-		lv = slog.LevelDebug
-	case "warn", "warning":
-		lv = slog.LevelWarn
-	case "error":
-		lv = slog.LevelError
-	}
-	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: lv}))
-}
+func newLogger(level string) *slog.Logger { return newLoggerTo(os.Stdout, level) }

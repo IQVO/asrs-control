@@ -39,6 +39,11 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) }}
 {{- end }}
 
+{{/* service.version: serviceVersion, else the image tag, else appVersion. */}}
+{{- define "asrs-control.serviceVersion" -}}
+{{- .Values.serviceVersion | default .Values.image.tag | default .Chart.AppVersion }}
+{{- end }}
+
 {{- define "asrs-control.databaseSecretName" -}}
 {{- default (printf "%s-db" (include "asrs-control.fullname" .)) .Values.database.existingSecret }}
 {{- end }}
@@ -56,6 +61,11 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 {{- if ne (int .Values.replicaCount) 1 }}
 {{- fail "replicaCount must be 1: asrs-control is the single scheduler of each AS/RS (ADR 0002)" }}
+{{- end }}
+{{- range .Values.extraEnv }}
+{{- if has .name (list "ENVIRONMENT" "SERVICE_VERSION" "OTEL_EXPORTER_OTLP_ENDPOINT" "OTEL_SERVICE_NAME") }}
+{{- fail (printf "extraEnv must not set %s: the chart renders it from otel.*, environment or serviceVersion" .name) }}
+{{- end }}
 {{- end }}
 {{- if lt (int .Values.terminationGracePeriodSeconds) 15 }}
 {{- fail "terminationGracePeriodSeconds must be at least 15 (10 s HTTP drain plus the relay and MQTT shutdown)" }}

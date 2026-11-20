@@ -58,6 +58,8 @@ type Deps struct {
 	IDs       ports.IDs
 	Velocity  VelocityPolicy
 	Log       *slog.Logger
+	// Metrics counts accepted and ended external jobs after commit; nil records nothing.
+	Metrics ports.JobMetrics
 }
 
 // Service is the application.

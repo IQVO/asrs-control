@@ -82,7 +82,7 @@ func TestCompleteMotionOfAStoreRaisesContainerStored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := storagejob.ContainerStored{JobID: "sj-1", AsrsID: "ASRS1", ContainerID: "C1", PortID: "IN1", Reference: "leg-9", At: t1, PLCTime: plc}
+	want := storagejob.ContainerStored{JobID: "sj-1", AsrsID: "ASRS1", ContainerID: "C1", PortID: "IN1", Reference: "leg-9", At: t1, PLCTime: plc, AcceptedAt: t0}
 	if len(evs) != 1 || evs[0] != want {
 		t.Fatalf("events = %+v, want %+v", evs, want)
 	}
@@ -119,7 +119,7 @@ func TestARetrieveWaitsForItsArrivalAndScansIt(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := storagejob.ContainerPresentedAtPort{JobID: "sj-2", AsrsID: "ASRS1", ContainerID: "C1", PortID: "OUT1", Scan: c.want, ScannedContainerID: c.scanned, At: t1, PLCTime: plc}
+		want := storagejob.ContainerPresentedAtPort{JobID: "sj-2", AsrsID: "ASRS1", ContainerID: "C1", PortID: "OUT1", Scan: c.want, ScannedContainerID: c.scanned, At: t1, PLCTime: plc, AcceptedAt: t0}
 		if len(evs) != 1 || evs[0] != want || r.Status() != storagejob.Done {
 			t.Fatalf("scan %q: events %+v, want %+v", c.scanned, evs, want)
 		}
@@ -134,7 +134,7 @@ func TestFailEndsAnOpenJobOnceAndOnlyExternalJobsPublish(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := storagejob.StorageJobFailed{JobID: "sj-2", AsrsID: "ASRS1", Kind: storagejob.Retrieve, ContainerID: "C1", PortID: "OUT1",
-		Reason: storagejob.ReasonPortOccupied, PLCReason: "PORT_OCCUPIED", At: t1, PLCTime: plc}
+		Reason: storagejob.ReasonPortOccupied, PLCReason: "PORT_OCCUPIED", At: t1, PLCTime: plc, AcceptedAt: t0}
 	if len(evs) != 1 || evs[0] != want {
 		t.Fatalf("events = %+v, want %+v", evs, want)
 	}

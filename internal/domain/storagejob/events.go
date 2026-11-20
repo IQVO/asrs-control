@@ -11,10 +11,11 @@ const (
 	ScanMismatch ScanResult = "MISMATCH"
 )
 
-// ContainerStored: a store's JOB_DONE. The rack position stays inside the context.
+// ContainerStored: a store's JOB_DONE. The rack position stays inside the context. AcceptedAt
+// (the job's acceptance) is not on the wire; it times the job (ADR 0004).
 type ContainerStored struct {
 	JobID, AsrsID, ContainerID, PortID, Reference string
-	At, PLCTime                                   time.Time
+	At, PLCTime, AcceptedAt                       time.Time
 }
 
 // ContainerPresentedAtPort: a retrieve's PORT_ARRIVAL at its output port.
@@ -22,7 +23,7 @@ type ContainerPresentedAtPort struct {
 	JobID, AsrsID, ContainerID, PortID, Reference string
 	Scan                                          ScanResult
 	ScannedContainerID                            string
-	At, PLCTime                                   time.Time
+	At, PLCTime, AcceptedAt                       time.Time
 }
 
 // StorageJobFailed: an external job failed or was cancelled. PLCTime is zero when the failure
@@ -33,5 +34,5 @@ type StorageJobFailed struct {
 	ContainerID, PortID, Reference string
 	Reason                         Reason
 	PLCReason                      string
-	At, PLCTime                    time.Time
+	At, PLCTime, AcceptedAt        time.Time
 }
