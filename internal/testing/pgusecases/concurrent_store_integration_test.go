@@ -1,8 +1,8 @@
 //go:build integration
 
 // Package pgusecases_test runs the real use cases over the Postgres adapter. It is a test-only
-// package under internal/testing because it must import both the application layer and the
-// outbound adapter, which the adapters themselves may not do (hexagonal dependency rule).
+// package under internal/testing because it composes the memory fakes, the Postgres adapters
+// and the use cases in one wiring, which no package under internal/adapters should do.
 package pgusecases_test
 
 import (
