@@ -15,14 +15,24 @@ This project is a domain-driven design study. It is not associated with, endorse
 
 ## Documentation
 
-The strategic design is warehouse-docs `docs/wcs/` (WCS section). This repository's own records:
+The documentation site is built from `docs/` (Docusaurus) and published to
+[iqvo.github.io/asrs-control](https://iqvo.github.io/asrs-control/) from `main` by `.github/workflows/docs.yml`
+(pull requests only build it). The strategic design is the warehouse-docs WCS section:
+[asrs-control](https://iqvo.github.io/warehouse-docs/wcs/asrs-control).
 
 | Page | What it holds |
 | --- | --- |
-| `docs/adr/` | ADR 0001 (the context), 0002 (telegram conformance, the layout file, one job per aisle unit), 0003 (CloudEvents and the type catalogue) |
+| `docs/docs/overview/` | introduction, architecture, quickstart |
+| `docs/docs/operations/` | configuration, runbook, observability, troubleshooting |
+| `docs/docs/development/testing.md` | test layers, make targets, CI jobs |
+| `docs/docs/ddd/` | ubiquitous language, use cases, classification and the ddd-crew artifact pack |
+| `docs/docs/api-reference/` | API overview, the REST reference generated from `apis/openapi.yaml`, the event and telegram catalogue |
+| `docs/docs/ecosystem/integration.md` | neighbours, topics, broker, what is not wired yet |
+| `docs/adr/` | ADR 0001 (the context), 0002 (telegram conformance, the layout file, one job per aisle unit), 0003 (CloudEvents and the type catalogue), served on the site under `/docs/adr` |
 | `apis/openapi.yaml` | the REST subsystem-controller interface |
-| `apis/asyncapi.yaml` | the five published events |
+| `apis/asyncapi.yaml` | the five published events (Kafka) and the telegram protocol v1 channels to the PLC (MQTT) |
 | `config/layout.example.yaml` | the layout file format |
+| `SPEC.md` | the long description of what is built and what is planned |
 
 ## Architecture
 
@@ -42,7 +52,8 @@ Publishes CloudEvents 1.0 (`com.warehouse.wes.asrs-control.<entity>.<EventName>`
 `com.warehouse.wes.asrs-control.storagejob.ContainerPresentedAtPort`. Five types: ContainerStored,
 ContainerPresentedAtPort, StorageJobFailed (storagejob), EquipmentStateChanged (equipmentunit), AsrsCapacityChanged
 (asrs). Consumes nothing from Kafka. Speaks AS/RS telegram protocol v1 (IQVO/equipment-emulator
-`docs/telegram-protocol.md`) on `asrs/v1/<asrsId>/down` and `/up`.
+`docs/telegram-protocol.md`) on `asrs/v1/<asrsId>/down` and `/up`, described in `apis/asyncapi.yaml` (server
+`plc-link`).
 
 ## Running it
 
@@ -81,7 +92,7 @@ RETRYABLE refusals release the key (the class of every problem type is listed in
 
 ## Helm chart
 
-`charts/asrs-control`: one Deployment (component `api`, exactly one replica, Recreate), a Service, a ConfigMap with
+`charts/asrs-control` (lint fixtures `ci/default-values.yaml` and `ci/all-components-values.yaml`): one Deployment (component `api`, exactly one replica, Recreate), a Service, a ConfigMap with
 the environment and `layout.yaml`, and a Secret for `DATABASE_URL`. `database.url` (or `database.existingSecret`)
 and `kafka.brokers` are mandatory.
 
@@ -94,8 +105,9 @@ and `kafka.brokers` are mandatory.
 
 Unit and BDD (`features/asrs_control.feature`, `make bdd`), integration (`//go:build integration`: Postgres
 repositories, the MQTT link against Mosquitto, the end-to-end test against the emulator). CI jobs: lint, guide-lint,
-complexity, file-length, test, bdd, integration, mutation-fast, mutation, drift, api-lint, vuln, helm-lint,
-chart-tests, arch-test, spec-breaking, trivy-scan, docker-publish, release.
+complexity, file-length, test, bdd, integration, mutation-fast, mutation, drift, api-lint, vuln, docs-api-drift,
+helm-lint, chart-tests, arch-test, spec-breaking, trivy-scan, docker-publish, release; `.github/workflows/docs.yml`
+builds the documentation site.
 
 ## Architecture Decision Records
 
