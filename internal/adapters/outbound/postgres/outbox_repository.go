@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -61,6 +62,19 @@ func (r *OutboxRepo) Insert(ctx context.Context, msgs ...outbox.Message) error {
 		}
 		return nil
 	})
+}
+
+// Backlog is the unpublished outbox (the asrs_control.outbox.backlog and .lag gauges, ADR 0004):
+// how many rows wait, attempt-capped ones included, and how long the oldest of them has waited
+// on the database's clock (0 when nothing waits).
+func (r *OutboxRepo) Backlog(ctx context.Context) (rows int64, oldest time.Duration, err error) {
+	var seconds float64
+	err = r.pool.QueryRow(ctx, `SELECT count(*), COALESCE(EXTRACT(EPOCH FROM now() - min(created_at)), 0)::float8
+		FROM outbox_events WHERE published_at IS NULL`).Scan(&rows, &seconds)
+	if err != nil {
+		return 0, 0, fmt.Errorf("read the outbox backlog: %w", err)
+	}
+	return rows, time.Duration(seconds * float64(time.Second)), nil
 }
 
 type pendingRow struct {
