@@ -6,6 +6,8 @@ import (
 	"time"
 
 	kafkago "github.com/segmentio/kafka-go"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/IQVO/asrs-control/internal/application/outbox"
 )
@@ -52,20 +54,29 @@ func (s *RelaySink) Send(ctx context.Context, msgs ...outbox.Message) error {
 	if len(msgs) == 0 {
 		return nil
 	}
-	out := make([]kafkago.Message, len(msgs))
 	for i, m := range msgs {
 		if m.Topic == "" {
 			return fmt.Errorf("kafka relay sink: message %d (%s) has no topic", i, m.EventType)
 		}
-		headers := make([]kafkago.Header, len(m.Headers))
-		for j, h := range m.Headers {
-			headers[j] = kafkago.Header{Key: h.Key, Value: []byte(h.Value)}
-		}
+	}
+	out := make([]kafkago.Message, len(msgs))
+	spans := make([]trace.Span, len(msgs))
+	for i, m := range msgs {
+		headers := kafkaHeaders(m.Headers)
+		spans[i] = startPublish(ctx, m, &headers)
 		out[i] = kafkago.Message{Topic: m.Topic, Key: m.Key, Value: m.Value, Headers: headers}
 	}
 	bctx, cancel := context.WithTimeout(ctx, sendTimeout)
 	defer cancel()
-	if err := s.writer.WriteMessages(bctx, out...); err != nil {
+	err := s.writer.WriteMessages(bctx, out...)
+	for _, span := range spans {
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}
+	if err != nil {
 		return fmt.Errorf("kafka relay sink: write %d message(s): %w", len(out), err)
 	}
 	return nil
