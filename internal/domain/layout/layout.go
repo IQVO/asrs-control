@@ -170,15 +170,16 @@ func (l Layout) CostOf(p Position) float64 {
 // UnitID is the telegram unit id of an aisle's shuttle-and-lift unit ("A1").
 func (l Layout) UnitID(aisle int) string { return "A" + strconv.Itoa(aisle) }
 
-// AisleOfUnit parses a telegram unit id back to its aisle.
+// AisleOfUnit parses a telegram unit id back to its aisle. The number is parsed as 32-bit:
+// an aisle is persisted as int32, so a larger id is refused here rather than wrapped later.
 func (l Layout) AisleOfUnit(unitID string) (int, bool) {
 	rest, ok := strings.CutPrefix(unitID, "A")
 	if !ok {
 		return 0, false
 	}
-	n, err := strconv.Atoi(rest)
-	if err != nil || n < 1 || n > l.Aisles {
+	v, err := strconv.ParseInt(rest, 10, 32)
+	if err != nil || v < 1 || v > int64(l.Aisles) {
 		return 0, false
 	}
-	return n, true
+	return int(v), true
 }

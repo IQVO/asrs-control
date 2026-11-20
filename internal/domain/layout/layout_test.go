@@ -140,6 +140,21 @@ func TestUnitIDsRoundTrip(t *testing.T) {
 	}
 }
 
+// An aisle travels to Postgres as int32 (the storage_jobs position array): a unit id
+// beyond int32 must be refused at the parse, whatever the layout's aisle count says,
+// or it would wrap silently into another aisle (CodeQL go/incorrect-integer-conversion).
+func TestAisleOfUnitRefusesAnAisleBeyondInt32(t *testing.T) {
+	l := layout.Layout{Aisles: math.MaxInt}
+	for _, id := range []string{"A2147483648", "A4294967297", "A9223372036854775807"} {
+		if n, ok := l.AisleOfUnit(id); ok {
+			t.Errorf("AisleOfUnit(%q) = %d, accepted", id, n)
+		}
+	}
+	if n, ok := l.AisleOfUnit("A2147483647"); !ok || n != math.MaxInt32 {
+		t.Errorf("AisleOfUnit(A2147483647) = %d, %v; want the int32 maximum accepted", n, ok)
+	}
+}
+
 func TestPositionHelpers(t *testing.T) {
 	p := layout.Position{Aisle: 1, Level: 2, Slot: 3, Depth: 2}
 	if p.String() != "A1-L2-S3-D2" || p.Front().Depth != 1 || p.Front().Back() != p {
