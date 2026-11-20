@@ -10,6 +10,8 @@ import (
 
 	pahomqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/IQVO/asrs-control/internal/adapters/telegram"
 	"github.com/IQVO/asrs-control/internal/application/telegrams"
@@ -45,12 +47,15 @@ type Link struct {
 	pub    func(topic string, payload []byte) error
 	client pahomqtt.Client
 	start  sync.Once
+	// tracer starts one span per telegram (link_tracing.go); retransmits counts resends.
+	tracer      trace.Tracer
+	retransmits RetransmitCounter
 }
 
 // NewLink connects the link's client and subscribes the up topic on every (re)connection.
 // Telegrams that arrive before Start wait in the inbox.
-func NewLink(brokerURL, clientID, asrsID string, up Uplink, now func() time.Time, log *slog.Logger) (*Link, error) {
-	l := newLink(asrsID, up, now, log)
+func NewLink(brokerURL, clientID, asrsID string, up Uplink, now func() time.Time, log *slog.Logger, opts ...Option) (*Link, error) {
+	l := newLink(asrsID, up, now, log, opts...)
 	c, err := connect(brokerURL, clientID, func(c pahomqtt.Client) {
 		if err := subscribe(c, telegram.UpTopic(asrsID), l.handler()); err != nil {
 			log.Warn("mqtt subscribe failed; retried on the next reconnect", "asrs", asrsID, "error", err)
@@ -69,9 +74,14 @@ func NewLink(brokerURL, clientID, asrsID string, up Uplink, now func() time.Time
 	return l, nil
 }
 
-func newLink(asrsID string, up Uplink, now func() time.Time, log *slog.Logger) *Link {
-	return &Link{asrsID: asrsID, up: up, retx: telegram.NewRetransmitter(RetransmitAfter, MaxRetransmits),
-		inbox: newInbox(InboxSize, "asrs "+asrsID, log), now: now, wall: time.Now, newID: uuid.NewString, log: log}
+func newLink(asrsID string, up Uplink, now func() time.Time, log *slog.Logger, opts ...Option) *Link {
+	l := &Link{asrsID: asrsID, up: up, retx: telegram.NewRetransmitter(RetransmitAfter, MaxRetransmits),
+		inbox: newInbox(InboxSize, "asrs "+asrsID, log), now: now, wall: time.Now, newID: uuid.NewString, log: log,
+		tracer: otel.Tracer(tracerName), retransmits: noRetransmits{}}
+	for _, o := range opts {
+		o(l)
+	}
+	return l
 }
 
 // handler is paho's message handler: it only enqueues.
@@ -96,75 +106,99 @@ func (l *Link) startWorkers(ctx context.Context) {
 // published, since its ACK can be handled before Publish returns. Two commands of one aisle
 // never race: the aisle has one job in flight. A CANCEL committed in the same instant as its
 // job's dispatch may overtake it; the PLC then refuses it UNKNOWN_JOB and the job runs on.
-func (l *Link) Send(_ context.Context, cmds ...telegrams.Command) {
+// The send carries ctx (the use case's, after commit) so each telegram's span joins its trace.
+func (l *Link) Send(ctx context.Context, cmds ...telegrams.Command) {
 	for _, c := range cmds {
-		l.send(toTelegram(c, l.now()), true)
+		l.send(ctx, toTelegram(c, l.now()), true)
 	}
 }
 
-func (l *Link) send(t telegram.Telegram, track bool) {
+func (l *Link) send(ctx context.Context, t telegram.Telegram, track bool) {
+	l.publish(ctx, t, track, false)
+}
+
+// resend publishes a telegram the PLC did not acknowledge in time, counted as a retransmit.
+func (l *Link) resend(ctx context.Context, t telegram.Telegram) {
+	l.retransmits.TelegramRetransmitted(ctx, l.asrsID, string(t.Type))
+	l.publish(ctx, t, false, true)
+}
+
+func (l *Link) publish(ctx context.Context, t telegram.Telegram, track, retransmit bool) {
+	_, span := l.startPublish(ctx, t, retransmit)
+	defer span.End()
 	b, err := telegram.Encode(t)
 	if err != nil {
-		l.log.Error("cannot encode telegram", "asrs", l.asrsID, "type", t.Type, "error", err)
+		failSpan(span, err)
+		l.log.ErrorContext(ctx, "cannot encode telegram", "asrs", l.asrsID, "type", t.Type, "error", err)
 		return
 	}
 	if track {
 		l.retx.Track(t, l.wall())
 	}
 	if err := l.pub(telegram.DownTopic(l.asrsID), b); err != nil {
-		l.log.Warn("mqtt publish failed; the retransmitter retries", "telegramId", t.ID, "error", err)
+		failSpan(span, err)
+		l.log.WarnContext(ctx, "mqtt publish failed; the retransmitter retries", "telegramId", t.ID, "error", err)
 	}
 }
 
-// handle runs on the worker: one up-topic message.
+// handle runs on the worker: one up-topic message, inside its process span.
 func (l *Link) handle(ctx context.Context, payload []byte) {
+	ctx, span := l.startProcess(ctx)
+	defer span.End()
 	t, err := telegram.Decode(payload)
+	tagTelegram(span, t)
 	switch {
 	case err != nil:
-		l.refuseMalformed(t, err)
+		err = l.refuseMalformed(ctx, t, err)
 	case t.Type == telegram.Ack:
-		l.onAck(ctx, t)
+		err = l.onAck(ctx, t)
 	case !telegram.IsUp(t.Type):
-		l.refuseMalformed(t, fmt.Errorf("MALFORMED: %s is not an up telegram", t.Type))
+		err = l.refuseMalformed(ctx, t, fmt.Errorf("MALFORMED: %s is not an up telegram", t.Type))
 	default:
-		l.onUp(ctx, t)
+		err = l.onUp(ctx, t)
+	}
+	if err != nil {
+		failSpan(span, err)
 	}
 }
 
-func (l *Link) refuseMalformed(t telegram.Telegram, err error) {
-	l.log.Warn("malformed up telegram", "asrs", l.asrsID, "telegramId", t.ID, "error", err)
-	if t.ID == "" {
-		return
+func (l *Link) refuseMalformed(ctx context.Context, t telegram.Telegram, err error) error {
+	l.log.WarnContext(ctx, "malformed up telegram", "asrs", l.asrsID, "telegramId", t.ID, "error", err)
+	if t.ID != "" {
+		l.send(ctx, telegram.NewAck(t, errors.New(reasonMalformed), l.newID(), l.now()), false)
 	}
-	l.send(telegram.NewAck(t, errors.New(reasonMalformed), l.newID(), l.now()), false)
+	return err
 }
 
-func (l *Link) onUp(ctx context.Context, t telegram.Telegram) {
+func (l *Link) onUp(ctx context.Context, t telegram.Telegram) error {
 	ackID, err := l.up.HandleUp(ctx, l.asrsID, toUp(t))
 	if err != nil {
-		l.log.Error("up telegram not applied; not acknowledged, the PLC retransmits it", "telegramId", t.ID, "type", t.Type, "error", err)
-		return
+		l.log.ErrorContext(ctx, "up telegram not applied; not acknowledged, the PLC retransmits it", "telegramId", t.ID, "type", t.Type, "error", err)
+		return err
 	}
-	l.send(telegram.NewAck(t, nil, ackID, l.now()), false)
+	l.send(ctx, telegram.NewAck(t, nil, ackID, l.now()), false)
+	return nil
 }
 
-func (l *Link) onAck(ctx context.Context, t telegram.Telegram) {
+func (l *Link) onAck(ctx context.Context, t telegram.Telegram) error {
 	orig, tracked := l.retx.Ack(t.AckOf)
 	if !tracked {
-		return
+		return nil
 	}
 	accepted := *t.Accepted
 	if !accepted && t.Reason == reasonNotReady {
 		l.retx.Track(orig, l.wall())
-		return
+		return nil
 	}
 	if orig.Type == telegram.StateRequest {
-		return
+		return nil
 	}
 	if err := l.up.HandleAck(ctx, l.asrsID, t.AckOf, accepted, t.Reason); err != nil {
-		l.log.Error("ACK not applied; the command is resent so the PLC answers again", "telegramId", t.AckOf, "error", err)
+		l.log.ErrorContext(ctx, "ACK not applied; the command is resent so the PLC answers again", "telegramId", t.AckOf, "error", err)
 		l.retx.Track(orig, l.wall())
+		return err
 	}
+	return nil
 }
 
 func (l *Link) runRetransmit(ctx context.Context) {
@@ -186,7 +220,7 @@ func (l *Link) runRetransmit(ctx context.Context) {
 func (l *Link) retransmitDue(ctx context.Context) {
 	resend, expired := l.retx.Due(l.wall())
 	for _, t := range resend {
-		l.send(t, false)
+		l.resend(ctx, t)
 	}
 	for _, t := range expired {
 		l.inbox.put(ctx, func(ctx context.Context) { l.expire(ctx, t) })
