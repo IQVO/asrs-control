@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -29,12 +30,20 @@ const openExternalIndex = "uq_storage_jobs_open_external"
 
 const openStatus = `status NOT IN ('DONE', 'FAILED', 'CANCELLED')`
 
-// posArray: positions are bounded by the validated layout (small ints), so int32 cannot overflow.
+// posArray: positions are bounded by the validated layout (small positive ints,
+// revalidated by storagemap.Rehydrate), and the explicit bound check makes the
+// narrowing safe even if that invariant ever changes (CodeQL go/incorrect-
+// integer-conversion; layout coords cannot approach MaxInt32).
 func posArray(p layout.Position) []int32 {
 	if p.IsZero() {
 		return nil
 	}
-	return []int32{int32(p.Aisle), int32(p.Level), int32(p.Slot), int32(p.Depth)} //nolint:gosec // layout-bounded
+	for _, v := range []int{p.Aisle, p.Level, p.Slot, p.Depth} {
+		if v < 0 || v > math.MaxInt32 {
+			return nil // an out-of-range coordinate is not a position; stored as NULL
+		}
+	}
+	return []int32{int32(p.Aisle), int32(p.Level), int32(p.Slot), int32(p.Depth)} //nolint:gosec // bounded above
 }
 
 func posFrom(a []int32) layout.Position {
