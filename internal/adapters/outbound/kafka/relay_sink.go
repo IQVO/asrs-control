@@ -3,6 +3,7 @@ package kafka
 import (
 	"context"
 	"fmt"
+	"time"
 
 	kafkago "github.com/segmentio/kafka-go"
 
@@ -13,6 +14,11 @@ import (
 type Writer interface {
 	WriteMessages(ctx context.Context, msgs ...kafkago.Message) error
 }
+
+// sendTimeout bounds one relay send. kafka-go's dial, resolve and batch paths
+// carry deadlines of their own only some of the time; this ctx deadline is the
+// backstop that keeps a stalled send from wedging the relay's Drain pass.
+const sendTimeout = 15 * time.Second
 
 // RelaySink is the outbox relay's ports-facing Sink: it writes each drained
 // outbox message to the topic the message itself names (the writer built by
@@ -33,7 +39,15 @@ func NewRelaySink(brokers []string) *RelaySink {
 func NewRelaySinkWithWriter(w Writer) *RelaySink { return &RelaySink{writer: w} }
 
 // Send writes msgs in one WriteMessages call. A message without a topic is
-// rejected before anything is written.
+// rejected before anything is written. The write is bounded: WriteMessages
+// honours ctx cancellation, so a client-side stall (an undeadlined dial, a DNS
+// lookup, a wedged batch — all seen in CI on the runner's container networking)
+// surfaces as an error here after sendTimeout instead of blocking the relay's
+// Drain forever with its claimed outbox rows locked (the 2026-11-20 e2e
+// incident: rows rotted unpublished with zero error logs). The Drain pass then
+// records the failure, commits — releasing the row locks — and the next pass
+// retries; delivery stays at-least-once with the CloudEvents id persisted at
+// encode time.
 func (s *RelaySink) Send(ctx context.Context, msgs ...outbox.Message) error {
 	if len(msgs) == 0 {
 		return nil
@@ -49,7 +63,9 @@ func (s *RelaySink) Send(ctx context.Context, msgs ...outbox.Message) error {
 		}
 		out[i] = kafkago.Message{Topic: m.Topic, Key: m.Key, Value: m.Value, Headers: headers}
 	}
-	if err := s.writer.WriteMessages(ctx, out...); err != nil {
+	bctx, cancel := context.WithTimeout(ctx, sendTimeout)
+	defer cancel()
+	if err := s.writer.WriteMessages(bctx, out...); err != nil {
 		return fmt.Errorf("kafka relay sink: write %d message(s): %w", len(out), err)
 	}
 	return nil
