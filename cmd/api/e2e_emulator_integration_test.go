@@ -112,7 +112,7 @@ func startAsrsControl(t *testing.T, mqURL string) (string, string) {
 	kafkatest.CreateTopic(t, "warehouse.asrs-control.events")
 	kafkatest.CreateTopic(t, "warehouse.asrs-control.analytics")
 	vars := map[string]string{"KAFKA_BROKERS": strings.Join(brokers, ","), "MQTT_URL": mqURL, "ASRS_LAYOUT_FILE": layoutFile,
-		"OUTBOX_INTERVAL_MS": "100"}
+		"OUTBOX_INTERVAL_MS": "100", "OUTBOX_MAX_ATTEMPTS": "3"}
 	cfg, err := loadConfig(func(k string) string { return vars[k] })
 	if err == nil {
 		t.Fatal("loadConfig accepted a configuration without a database")
@@ -171,7 +171,7 @@ func (e *e2e) dumpOutbox() {
 	var held, total int
 	_ = conn.QueryRow(ctx, `SELECT count(*) FILTER (WHERE convert_from(value, 'UTF8') LIKE '%"state":"HELD"%'), count(*) FROM outbox_events`).Scan(&held, &total)
 	e.t.Logf("outbox HELD-bearing rows=%d of %d", held, total)
-	stuck, err := conn.Query(ctx, `SELECT id, event_type, attempts, published_at IS NOT NULL, coalesce(last_error, '') FROM outbox_events WHERE attempts > 0 OR published_at IS NULL ORDER BY id DESC LIMIT 6`)
+	stuck, err := conn.Query(ctx, `SELECT id, event_type, attempts, published_at IS NOT NULL, coalesce(last_error, '') FROM outbox_events WHERE attempts > 0 OR published_at IS NULL ORDER BY id`)
 	if err == nil {
 		for stuck.Next() {
 			var id, attempts int

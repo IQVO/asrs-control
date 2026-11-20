@@ -18,7 +18,10 @@ import (
 // TCP connection made WriteMessages block forever while the outbox relay held
 // its row locks — passes went silent and events rotted unpublished (CI e2e,
 // 2026-11-20). A timed-out write returns an error, the row's failure is
-// recorded and the next pass re-dials.
+// recorded and the next pass re-dials. MaxAttempts 2 bounds a dead route:
+// kafka-go retries one batch internally up to ten times with the full request
+// deadline each, so a broken topic route could hold a single send (and, in id
+// order, every row behind it) for 100+ seconds with no error surfaced.
 func NewWriter(brokers string) *kafkago.Writer {
 	return &kafkago.Writer{
 		Addr:                   kafkago.TCP(splitBrokers(brokers)...),
@@ -27,6 +30,7 @@ func NewWriter(brokers string) *kafkago.Writer {
 		AllowAutoTopicCreation: true,
 		WriteTimeout:           10 * time.Second,
 		ReadTimeout:            10 * time.Second,
+		MaxAttempts:            2,
 	}
 }
 
