@@ -69,6 +69,11 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Agent surfaces',
+      items: ['mcp/tools', 'a2a/agent'],
+    },
+    {
+      type: 'category',
       label: 'Ecosystem',
       items: ['ecosystem/integration'],
     },
@@ -91,6 +96,16 @@ const sidebars: SidebarsConfig = {
           type: 'link',
           label: '0003 CloudEvents envelope and type catalogue',
           href: '/docs/adr/0003-cloudevents-envelope-and-type-catalogue',
+        },
+        {
+          type: 'link',
+          label: '0004 Adopt the fleet OpenTelemetry standard',
+          href: '/docs/adr/0004-adopt-the-fleet-opentelemetry-standard',
+        },
+        {
+          type: 'link',
+          label: '0005 A read-only MCP server and a read-only A2A agent',
+          href: '/docs/adr/0005-read-only-mcp-server-and-a2a-agent',
         },
       ],
     },

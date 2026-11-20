@@ -35,5 +35,6 @@ asrs-control's row of the warehouse-docs Event Standard subdomain table is `asrs
 ## Not wired yet
 
 - Registration in warehouse-infra (Terraform apps, Kong route) and a release: no `main` branch yet.
-- OpenTelemetry traces and metrics ([Observability](/docs/operations/observability)).
-- MCP and A2A surfaces.
+- The gateway routes of the MCP server and the A2A agent (`/api/mcp/asrs-control`, `/api/a2a/asrs-control`) and their
+  switch-on in warehouse-infra; the binaries and chart components exist ([MCP tools](/docs/mcp/tools),
+  [A2A agent](/docs/a2a/agent)), off by default.

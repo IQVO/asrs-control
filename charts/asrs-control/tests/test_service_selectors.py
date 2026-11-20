@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Assert the Service selects exactly one Deployment (the api component).
+"""Assert every Service selects exactly one Deployment, of its own component.
 
-`app.kubernetes.io/name` + `instance` are identical on every pod of a release,
-so a Service must also pin `app.kubernetes.io/component`.
+`app.kubernetes.io/name` + `instance` are identical on every pod of a release, so a Service must
+also pin `app.kubernetes.io/component`. Rendered twice: the defaults (the api only) and
+ci/all-components-values.yaml (api, mcp and a2a; ADR 0005).
 
 Run: python3 charts/asrs-control/tests/test_service_selectors.py
 Needs: helm, PyYAML.
@@ -17,13 +18,13 @@ from pathlib import Path
 CHART_DIR = Path(__file__).resolve().parents[1]
 
 
-def render() -> list[dict]:
+def render(values: str) -> list[dict]:
     result = subprocess.run(
-        ["helm", "template", "asrs-control", str(CHART_DIR), "-f", str(CHART_DIR / "ci" / "default-values.yaml")],
+        ["helm", "template", "asrs-control", str(CHART_DIR), "-f", str(CHART_DIR / "ci" / values)],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
-        raise SystemExit(f"FAIL: helm template:\n{result.stderr}")
+        raise SystemExit(f"FAIL: helm template ({values}):\n{result.stderr}")
     try:
         import yaml  # type: ignore
     except ModuleNotFoundError:
@@ -36,28 +37,32 @@ def matches(selector: dict, labels: dict) -> bool:
     return bool(selector) and all(labels.get(k) == v for k, v in selector.items())
 
 
-def main() -> None:
-    docs = render()
+def check(values: str, components: set[str]) -> list[str]:
+    docs = render(values)
     deployments = [d for d in docs if d["kind"] == "Deployment"]
     services = [d for d in docs if d["kind"] == "Service"]
     failures: list[str] = []
-    if len(deployments) != 1:
-        failures.append(f"want exactly 1 Deployment, got {len(deployments)}")
-    if len(services) != 1:
-        failures.append(f"want exactly 1 Service, got {len(services)}")
+    got = {d["spec"]["selector"]["matchLabels"].get("app.kubernetes.io/component") for d in deployments}
+    if got != components or len(deployments) != len(components):
+        failures.append(f"{values}: Deployments of components {sorted(got)}, want {sorted(components)}")
+    if len(services) != len(components):
+        failures.append(f"{values}: want {len(components)} Services, got {len(services)}")
     for svc in services:
         sel = svc["spec"]["selector"]
-        if sel.get("app.kubernetes.io/component") != "api":
-            failures.append("the Service must pin component=api")
-        hit = [d["metadata"]["name"] for d in deployments if matches(sel, d["spec"]["template"]["metadata"]["labels"])]
-        if len(hit) != 1:
-            failures.append(f"Service {svc['metadata']['name']} selects {len(hit)} Deployments: {hit}")
-    for dep in deployments:
-        if dep["spec"]["selector"]["matchLabels"].get("app.kubernetes.io/component") != "api":
-            failures.append("the Deployment selector must pin component=api")
+        comp = sel.get("app.kubernetes.io/component")
+        if comp not in components:
+            failures.append(f"{values}: Service {svc['metadata']['name']} does not pin a component")
+        hit = [d for d in deployments if matches(sel, d["spec"]["template"]["metadata"]["labels"])]
+        if len(hit) != 1 or hit[0]["spec"]["selector"]["matchLabels"].get("app.kubernetes.io/component") != comp:
+            failures.append(f"{values}: Service {svc['metadata']['name']} selects {[d['metadata']['name'] for d in hit]}")
+    return failures
+
+
+def main() -> None:
+    failures = check("default-values.yaml", {"api"}) + check("all-components-values.yaml", {"api", "mcp", "a2a"})
     if failures:
         raise SystemExit("FAIL:\n  " + "\n  ".join(failures))
-    print("ok: the Service selects exactly the api Deployment")
+    print("ok: every Service selects exactly its own component's Deployment (api; api, mcp, a2a)")
 
 
 if __name__ == "__main__":

@@ -98,6 +98,38 @@ serviceVersion: ""
 # (the observability env above): set those through their values.
 extraEnv: []
 
+# Read-only MCP server (cmd/mcp, ADR 0005): Streamable HTTP at /mcp on :8090, stateless, NO auth
+# (the ClusterIP boundary is the access control). Off by default; warehouse-infra switches it on.
+mcp:
+  enabled: false
+  replicaCount: 1
+  httpAddr: ":8090"            # MCP_ADDR
+  service:
+    type: ClusterIP
+    port: 8090
+    targetPort: 8090
+  extraEnv: []
+  resources:
+    limits: {cpu: 250m, memory: 128Mi}
+    requests: {cpu: 20m, memory: 32Mi}
+
+# Read-only A2A agent (cmd/a2a, ADR 0005): JSON-RPC at / and /a2a on :8093, the Agent Card at
+# /.well-known/agent-card.json, NO auth. agentUrl (A2A_AGENT_URL) is the URL the card advertises;
+# empty = this release's in-cluster Service DNS name. Off by default.
+a2a:
+  enabled: false
+  replicaCount: 1
+  httpAddr: ":8093"            # A2A_ADDR
+  agentUrl: ""
+  service:
+    type: ClusterIP
+    port: 8093
+    targetPort: 8093
+  extraEnv: []
+  resources:
+    limits: {cpu: 250m, memory: 128Mi}
+    requests: {cpu: 20m, memory: 32Mi}
+
 livenessProbe:
   httpGet: {path: /healthz, port: http}
   initialDelaySeconds: 5

@@ -28,7 +28,8 @@ The documentation site is built from `docs/` (Docusaurus) and published to
 | `docs/docs/ddd/` | ubiquitous language, use cases, classification and the ddd-crew artifact pack |
 | `docs/docs/api-reference/` | API overview, the REST reference generated from `apis/openapi.yaml`, the event and telegram catalogue |
 | `docs/docs/ecosystem/integration.md` | neighbours, topics, broker, what is not wired yet |
-| `docs/adr/` | ADR 0001 (the context), 0002 (telegram conformance, the layout file, one job per aisle unit), 0003 (CloudEvents and the type catalogue), served on the site under `/docs/adr` |
+| `docs/docs/mcp/tools.md`, `docs/docs/a2a/agent.md` | the read-only MCP server and A2A agent |
+| `docs/adr/` | ADR 0001 (the context), 0002 (telegram conformance, the layout file, one job per aisle unit), 0003 (CloudEvents and the type catalogue), 0004 (OpenTelemetry), 0005 (the read-only MCP server and A2A agent), served on the site under `/docs/adr` |
 | `apis/openapi.yaml` | the REST subsystem-controller interface |
 | `apis/asyncapi.yaml` | the five published events (Kafka) and the telegram protocol v1 channels to the PLC (MQTT) |
 | `config/layout.example.yaml` | the layout file format |
@@ -38,10 +39,11 @@ The documentation site is built from `docs/` (Docusaurus) and published to
 
 Hexagonal, enforced by `internal/architecture/architecture_test.go` (arch-go):
 
-    cmd/api                      composition root
+    cmd/api                      composition root (cmd/mcp, cmd/a2a: the read-only agent binaries)
     internal/domain/             layout, storagemap, storagejob, equipment, capacity, scheduling
     internal/application/        ports, usecases (one Service, every write in one aisle unit of work), outbox
     internal/adapters/inbound/http   REST
+    internal/adapters/inbound/mcp, a2a   the read-only MCP server and A2A agent (ADR 0005)
     internal/adapters/mqtt + telegram  the PLC link (telegram protocol v1)
     internal/adapters/outbound/  postgres, events, outbox relay, kafka, memory (test doubles), system
 
@@ -99,10 +101,25 @@ Every POST takes `Idempotency-Key`; 2xx and FINAL refusals replay for 24 hours w
 RETRYABLE refusals release the key (the class of every problem type is listed in `apis/openapi.yaml`). Errors are
 `application/problem+json` with a `code`. No authentication (fleet rule).
 
+## Agent surfaces (MCP and A2A)
+
+Two read-only binaries over the same read use cases ([ADR 0005](docs/adr/0005-read-only-mcp-server-and-a2a-agent.md)),
+unauthenticated, with no write seam, no MQTT and no Kafka:
+
+- `cmd/mcp`: an MCP server, Streamable HTTP only and stateless, on `:8090` (`/mcp`). Five L1 tools (`list_asrs`,
+  `get_asrs_state`, `get_asrs_capacity`, `get_storage_job`, `list_storage_jobs` keyset-paged), the resource template
+  `warehouse://asrs-control/asrs/{asrsId}/storage-jobs/{storageJobId}` and the `review_storage_job` prompt
+  ([docs](docs/docs/mcp/tools.md)).
+- `cmd/a2a`: an A2A agent, JSON-RPC on `:8093`, Agent Card at `/.well-known/agent-card.json`, skills `job_status` and
+  `asrs_capacity` at L1 ([docs](docs/docs/a2a/agent.md)).
+
+Requesting, cancelling and confirming pickups stay on REST.
+
 ## Helm chart
 
 `charts/asrs-control` (lint fixtures `ci/default-values.yaml` and `ci/all-components-values.yaml`): one Deployment (component `api`, exactly one replica, Recreate), a Service, a ConfigMap with
-the environment and `layout.yaml`, and a Secret for `DATABASE_URL`. `database.url` (or `database.existingSecret`)
+the environment and `layout.yaml`, and a Secret for `DATABASE_URL`. `mcp.enabled` and `a2a.enabled` (default false) add
+the read-only `cmd/mcp` and `cmd/a2a` Deployments and Services (8090, 8093). `database.url` (or `database.existingSecret`)
 and `kafka.brokers` are mandatory.
 
 ## Local development
@@ -120,7 +137,7 @@ builds the documentation site.
 
 ## Architecture Decision Records
 
-3 ADRs, indexed in `docs/adr/index.md`.
+5 ADRs, indexed in `docs/adr/index.md`.
 
 ## License
 

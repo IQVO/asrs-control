@@ -15,6 +15,15 @@
 {{- end }}
 {{- end }}
 
+{{/* The read-only agent components (ADR 0005): <fullname>-mcp and <fullname>-a2a. */}}
+{{- define "asrs-control.mcpFullname" -}}
+{{- printf "%s-mcp" (include "asrs-control.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "asrs-control.a2aFullname" -}}
+{{- printf "%s-a2a" (include "asrs-control.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
 {{- define "asrs-control.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "asrs-control.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
@@ -62,9 +71,9 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- if ne (int .Values.replicaCount) 1 }}
 {{- fail "replicaCount must be 1: asrs-control is the single scheduler of each AS/RS (ADR 0002)" }}
 {{- end }}
-{{- range .Values.extraEnv }}
+{{- range concat .Values.extraEnv .Values.mcp.extraEnv .Values.a2a.extraEnv }}
 {{- if has .name (list "ENVIRONMENT" "SERVICE_VERSION" "OTEL_EXPORTER_OTLP_ENDPOINT" "OTEL_SERVICE_NAME") }}
-{{- fail (printf "extraEnv must not set %s: the chart renders it from otel.*, environment or serviceVersion" .name) }}
+{{- fail (printf "extraEnv (api, mcp or a2a) must not set %s: the chart renders it from otel.*, environment or serviceVersion" .name) }}
 {{- end }}
 {{- end }}
 {{- if lt (int .Values.terminationGracePeriodSeconds) 15 }}

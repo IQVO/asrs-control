@@ -33,8 +33,10 @@ whole AS/RS is one logical location.
 
 ## Process
 
-One binary, `cmd/api`: the REST interface, one MQTT link per AS/RS, the transactional-outbox relay, an hourly purger and
-the probes. It runs on real Postgres, Kafka and MQTT only (no in-memory runtime; `runtime_no_memory_fitness_test.go`).
+`cmd/api`: the REST interface, one MQTT link per AS/RS, the transactional-outbox relay, an hourly purger and
+the probes. Two read-only agent binaries over the same read use cases (ADR 0005): `cmd/mcp`, an MCP server on :8090
+(five L1 tools, a storage-job resource template, the `review_storage_job` prompt) and `cmd/a2a`, an A2A agent on :8093
+(`job_status`, `asrs_capacity`). Neither has a write seam, MQTT or Kafka. It runs on real Postgres, Kafka and MQTT only (no in-memory runtime; `runtime_no_memory_fitness_test.go`).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -162,7 +164,6 @@ specs, chart render and selector tests. CI: `.github/workflows/ci.yml`; the docs
 
 ## Planned, not built
 
-- An MCP server and an A2A adapter, with the fleet agent authority levels.
 - Kong/Gateway API routes in the chart, registration in warehouse-infra, a first release (no `main` yet).
 - Measured mutation thresholds in `.gremlins.yaml`.
 - A reconciliation of ACKNOWLEDGED jobs (UNIT_STATE / aisle watchdog, or a protocol v2 job-state query).

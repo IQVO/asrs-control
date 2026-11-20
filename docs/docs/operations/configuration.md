@@ -31,6 +31,19 @@ unparsable or out-of-range number falls back to its default.
 | `SERVICE_VERSION` | `dev` | `service.version` | `serviceVersion` (empty: `image.tag`, then `appVersion`) |
 | `ENVIRONMENT` | `local` | `deployment.environment.name` (read by the telemetry adapter) | `environment` |
 
+## The MCP server and the A2A agent
+
+`cmd/mcp` and `cmd/a2a` ([ADR 0005](/docs/adr/0005-read-only-mcp-server-and-a2a-agent)) read `DATABASE_URL`,
+`MIGRATIONS_DATABASE_URL`, `ASRS_LAYOUT_FILE`, `LOG_LEVEL` and the telemetry variables exactly as `cmd/api` does, and
+nothing of Kafka or MQTT. The chart renders them from the same values; the components are off by default.
+
+| Variable | Binary | Default | Meaning | Chart value |
+| --- | --- | --- | --- | --- |
+| `MCP_ADDR` | `cmd/mcp` | `:8090` | listen address | `mcp.httpAddr` (component `mcp.enabled`) |
+| `A2A_ADDR` | `cmd/a2a` | `:8093` | listen address | `a2a.httpAddr` (component `a2a.enabled`) |
+| `A2A_AGENT_URL` | `cmd/a2a` | required | absolute http(s) URL the Agent Card advertises | `a2a.agentUrl`, empty: `http://<release>-a2a.<namespace>.svc.cluster.local:8093/` |
+| `OTEL_SERVICE_NAME` | both | `asrs-control-mcp` / `asrs-control-a2a` | `service.name` | `<otel.serviceName>-mcp` / `-a2a` |
+
 ## The layout file
 
 [ADR 0002](/docs/adr/0002-telegram-conformance-and-aisle-scheduling) decision 7. One entry per AS/RS, with the emulator

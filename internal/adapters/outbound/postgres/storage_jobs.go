@@ -121,7 +121,19 @@ func (r *StorageJobRepo) one(ctx context.Context, where string, args ...any) (*s
 }
 
 func (r *StorageJobRepo) many(ctx context.Context, where string, args ...any) ([]*storagejob.Job, error) {
-	rows, err := queryFor(ctx, r.pool).Query(ctx, `SELECT `+jobColumns+` FROM storage_jobs WHERE `+where+` ORDER BY seq`, args...)
+	return r.query(ctx, `SELECT `+jobColumns+` FROM storage_jobs WHERE `+where+` ORDER BY seq`, args...)
+}
+
+// ListExternal pages the external jobs newest first; the read runs outside any unit of work
+// when ctx carries none (cmd/mcp and cmd/a2a never open one).
+func (r *StorageJobRepo) ListExternal(ctx context.Context, asrsID string, status storagejob.Status, beforeSeq int64, limit int) ([]*storagejob.Job, error) {
+	return r.query(ctx, `SELECT `+jobColumns+` FROM storage_jobs
+		WHERE asrs_id = $1 AND kind <> 'RESHUFFLE' AND ($2 = '' OR status = $2) AND ($3 = 0 OR seq < $3)
+		ORDER BY seq DESC LIMIT $4`, asrsID, string(status), beforeSeq, limit)
+}
+
+func (r *StorageJobRepo) query(ctx context.Context, sql string, args ...any) ([]*storagejob.Job, error) {
+	rows, err := queryFor(ctx, r.pool).Query(ctx, sql, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list storage jobs: %w", err)
 	}

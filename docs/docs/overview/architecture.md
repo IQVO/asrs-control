@@ -96,5 +96,6 @@ that no longer contains a stored container's position.
 
 `internal/architecture/` holds the arch-go layer rules plus the fleet sensors: no memory adapter at runtime
 (`runtime_no_memory_fitness_test.go`), the event catalogue matches the contract (`catalogue_fitness_test.go`), Kafka
-writer acks, timeout and topic rules, the outbox relay cap, the DLQ shutdown rule, the MCP authority rules (vacuous until
-an MCP server exists), no Go files at the root, and the no-auth and envelope rules in `fitness_test.go`.
+writer acks, timeout and topic rules, the outbox relay cap, the DLQ shutdown rule, the MCP and A2A authority rules, the agent
+adapter dependency rules and the read-only allowlist of `cmd/mcp` and `cmd/a2a` (`agent_readonly_fitness_test.go`, ADR
+0005), no Go files at the root, and the no-auth and envelope rules in `fitness_test.go`.
