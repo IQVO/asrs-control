@@ -140,6 +140,16 @@ func TestUnitIDsRoundTrip(t *testing.T) {
 	}
 }
 
+// The first and the last aisle are both units: the parse bounds are inclusive.
+func TestAisleOfUnitAcceptsTheFirstAndTheLastAisle(t *testing.T) {
+	l := sample()
+	for id, want := range map[string]int{"A1": 1, "A2": 2} {
+		if n, ok := l.AisleOfUnit(id); !ok || n != want {
+			t.Errorf("AisleOfUnit(%q) = %d, %v; want %d, true", id, n, ok, want)
+		}
+	}
+}
+
 // An aisle travels to Postgres as int32 (the storage_jobs position array): a unit id
 // beyond int32 must be refused at the parse, whatever the layout's aisle count says,
 // or it would wrap silently into another aisle (CodeQL go/incorrect-integer-conversion).
