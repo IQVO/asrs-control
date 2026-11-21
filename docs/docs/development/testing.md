@@ -17,7 +17,7 @@ description: "The test layers of asrs-control, the make targets, the CI jobs tha
 | End to end | `cmd/api/e2e_emulator_integration_test.go` | `make integration` with `EQUIPMENT_EMULATOR_IMAGE` (`docker build -t equipment-emulator:e2e <equipment-emulator checkout>`) | the whole service against the emulator's PLC |
 | Architecture | `internal/architecture/` | `make arch-test` | layer direction and the fleet fitness rules |
 | Mutation | gremlins, `.gremlins.yaml` | `make mutation` (changed packages), `make mutation-full` | the tests assert, not merely execute |
-| Chart | `charts/asrs-control/tests/render_test.sh`, `test_service_selectors.py` | `bash charts/asrs-control/tests/render_test.sh` | the env ConfigMap is mounted, the render gates fire, the Service selects one Deployment |
+| Chart | `charts/asrs-control/tests/render_test.sh`, `test_service_selectors.py`, `test_kong_config.py` | `bash charts/asrs-control/tests/render_test.sh`, `python3 charts/asrs-control/tests/test_kong_config.py` | the env ConfigMap is mounted, every env var each binary reads is rendered, the render gates fire, each Service selects its own Deployment, the Kong routes and plugins follow the fleet contract (default off, annotated, no credential plugin, cors headers) |
 | Contracts | Spectral, `asyncapi_breaking.py`, oasdiff | `spectral lint ...`, CI `spec-breaking` | the specs lint and no PR breaks a consumer |
 
 Integration tests start their own containers (testcontainers-go); none reads `DATABASE_URL` or `KAFKA_BROKERS` to

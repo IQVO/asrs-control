@@ -164,7 +164,7 @@ specs, chart render and selector tests. CI: `.github/workflows/ci.yml`; the docs
 
 ## Planned, not built
 
-- Kong/Gateway API routes in the chart, registration in warehouse-infra, a first release (no `main` yet).
+- Registration in warehouse-infra (it switches on the chart's Kong routes and plugins), a first release (no `main` yet).
 - Measured mutation thresholds in `.gremlins.yaml`.
 - A reconciliation of ACKNOWLEDGED jobs (UNIT_STATE / aisle watchdog, or a protocol v2 job-state query).
 - material-flow-control itself (WCS plan 04), the main consumer of the interface.

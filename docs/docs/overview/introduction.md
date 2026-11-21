@@ -63,7 +63,7 @@ Built on `develop` (2026-11-20, PR #2): the REST subsystem-controller interface,
 CloudEvents types on `warehouse.asrs-control.events` and `.analytics`, Postgres persistence with a transactional outbox,
 the Helm chart, and the fleet OpenTelemetry standard (traces, metrics, trace-correlated logs,
 [ADR 0004](/docs/adr/0004-adopt-the-fleet-opentelemetry-standard)), and a read-only MCP server and A2A agent for other
-agents ([ADR 0005](/docs/adr/0005-read-only-mcp-server-and-a2a-agent)). Planned and **not built**: Kong routes in the chart, the registration in warehouse-infra, and a protocol v2 job-state query (the known limits
+agents ([ADR 0005](/docs/adr/0005-read-only-mcp-server-and-a2a-agent)). The chart carries the Kong routes and plugins (off by default). Planned and **not built**: the registration in warehouse-infra, and a protocol v2 job-state query (the known limits
 of ADR 0002).
 
 ## Read next

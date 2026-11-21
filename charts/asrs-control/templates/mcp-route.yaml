@@ -1,0 +1,45 @@
+{{- if and .Values.mcp.enabled .Values.mcp.route.enabled -}}
+{{- /*
+MCP exposure through the gateway (fleet decision 2026-10-13: gateway config lives in the application charts).
+
+Host contract: /api/mcp/asrs-control -> Service asrs-control-mcp:8090, prefix rewritten to /mcp (the canonical
+endpoint of cmd/mcp; probe the route at its root, appending another /mcp 404s). Streamable HTTP and stateless. No
+credential plugin on the route (fleet-wide revert 2026-09-11): access control is the in-cluster boundary.
+*/ -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "asrs-control.mcpFullname" . }}
+  labels:
+    {{- include "asrs-control.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp
+  {{- with include "asrs-control.kongPluginNames" . }}
+  annotations:
+    konghq.com/plugins: {{ . | quote }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- range .Values.mcp.route.parentRefs }}
+    - name: {{ required "every Gateway parentRef needs a name (warehouse-infra sets it)" .name }}
+      {{- if .namespace }}
+      namespace: {{ .namespace }}
+      {{- end }}
+      {{- if .sectionName }}
+      sectionName: {{ .sectionName }}
+      {{- end }}
+    {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ .Values.mcp.route.path }}
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /mcp
+      backendRefs:
+        - name: {{ include "asrs-control.mcpFullname" . }}
+          port: {{ .Values.mcp.service.port }}
+{{- end }}

@@ -1,6 +1,7 @@
 # Used by `helm lint` / `ct lint`: every optional value of the chart set at once.
 # asrs-control has the api component plus the two optional read-only agent
-# components (mcp, a2a; ADR 0005), both enabled here. This file exercises the
+# components (mcp, a2a; ADR 0005), both enabled here, with the three Gateway API
+# routes on (the KongPlugins stay off here; test_kong_config.py switches them on). This file exercises the
 # database from an existing Secret with the migrations key, the MQTT client id,
 # every config.* value, a two-AS/RS layout, extra env, pod annotations/labels and
 # scheduling. Dummy values, no password; nothing here is ever dialled.
@@ -50,13 +51,31 @@ otel:
   serviceName: "asrs-control-ci"
 environment: "ci"
 serviceVersion: "v0.0.0-ci"
+gatewayApi:
+  enabled: true
+  parentRefs:
+    - name: warehouse-gateway
+      namespace: kong
+      sectionName: http
 mcp:
   enabled: true
+  route:
+    enabled: true
+    parentRefs:
+      - name: warehouse-gateway
+        namespace: kong
+        sectionName: http
   extraEnv:
     - name: GOMAXPROCS
       value: "1"
 a2a:
   enabled: true
+  route:
+    enabled: true
+    parentRefs:
+      - name: warehouse-gateway
+        namespace: kong
+        sectionName: http
   agentUrl: "http://asrs-control-a2a.warehouse-systems.svc.cluster.local:8093/"
 extraEnv:
   - name: GOMAXPROCS

@@ -42,6 +42,31 @@ service:
   port: 80
   targetPort: 8080
 
+# Gateway API HTTPRoute for the api component (Kong; fleet decision 2026-10-13: routes and plugins live in this
+# chart). Off by default; warehouse-infra switches it on with the Gateway parentRef. Host contract:
+# /api/asrs-control -> Service :80, prefix rewritten to / while stripPath. No credential plugin (fleet-wide revert).
+gatewayApi:
+  enabled: false
+  path: "/api/asrs-control"
+  stripPath: true
+  parentRefs:
+    - name: ""
+      namespace: ""
+      sectionName: "http"
+
+# Namespace-scoped KongPlugins attached to every HTTPRoute of this chart through konghq.com/plugins (see
+# templates/kong-plugins.yaml). All off by default; warehouse-infra's values switch them on. cors.origin is the exact
+# web origin, never "*". No credential plugin, ever.
+kongPlugins:
+  cors:
+    enabled: false
+    origin: "http://localhost"
+  prometheus:
+    enabled: false
+  opentelemetry:
+    enabled: false
+    tracesEndpoint: "http://otel-collector.observability.svc.cluster.local:4318/v1/traces"
+
 database:
   url: ""
   existingSecret: ""
@@ -108,6 +133,15 @@ mcp:
     type: ClusterIP
     port: 8090
     targetPort: 8090
+  # Kong exposure: /api/mcp/asrs-control -> Service :8090, prefix rewritten to /mcp. Needs the Gateway parentRef of
+  # the environment that deploys the chart.
+  route:
+    enabled: false
+    path: "/api/mcp/asrs-control"
+    parentRefs:
+      - name: ""
+        namespace: ""
+        sectionName: "http"
   extraEnv: []
   resources:
     limits: {cpu: 250m, memory: 128Mi}
@@ -125,6 +159,14 @@ a2a:
     type: ClusterIP
     port: 8093
     targetPort: 8093
+  # Kong exposure: /api/a2a/asrs-control -> Service :8093, prefix rewritten to /. Needs the Gateway parentRef.
+  route:
+    enabled: false
+    path: "/api/a2a/asrs-control"
+    parentRefs:
+      - name: ""
+        namespace: ""
+        sectionName: "http"
   extraEnv: []
   resources:
     limits: {cpu: 250m, memory: 128Mi}

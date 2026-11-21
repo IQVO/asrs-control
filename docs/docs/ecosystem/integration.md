@@ -34,7 +34,8 @@ asrs-control's row of the warehouse-docs Event Standard subdomain table is `asrs
 
 ## Not wired yet
 
-- Registration in warehouse-infra (Terraform apps, Kong route) and a release: no `main` branch yet.
-- The gateway routes of the MCP server and the A2A agent (`/api/mcp/asrs-control`, `/api/a2a/asrs-control`) and their
-  switch-on in warehouse-infra; the binaries and chart components exist ([MCP tools](/docs/mcp/tools),
-  [A2A agent](/docs/a2a/agent)), off by default.
+- Registration in warehouse-infra (Terraform apps, the `helm-values/asrs-control.yaml` that switches on the Gateway
+  routes, the KongPlugins and the mcp/a2a components) and a release: no `main` branch yet. The chart side exists, off by
+  default: `/api/asrs-control`, `/api/mcp/asrs-control` and `/api/a2a/asrs-control`
+  ([Configuration](/docs/operations/configuration#gateway-kong), [MCP tools](/docs/mcp/tools),
+  [A2A agent](/docs/a2a/agent)).

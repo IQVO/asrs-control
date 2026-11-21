@@ -122,6 +122,12 @@ the environment and `layout.yaml`, and a Secret for `DATABASE_URL`. `mcp.enabled
 the read-only `cmd/mcp` and `cmd/a2a` Deployments and Services (8090, 8093). `database.url` (or `database.existingSecret`)
 and `kafka.brokers` are mandatory.
 
+Kong (fleet decision 2026-10-13: routes and plugins in the chart, all off by default, switched on by warehouse-infra):
+Gateway API HTTPRoutes `/api/asrs-control` (api, rewritten to `/`), `/api/mcp/asrs-control` (rewritten to `/mcp`) and
+`/api/a2a/asrs-control` (rewritten to `/`), each annotated with the chart's KongPlugins (`kongPlugins.cors` with the exact
+origin, `Idempotency-Key`/`If-Match` allowed and `ETag`/`Idempotency-Replayed`/`Mcp-Session-Id` exposed, `prometheus`,
+`opentelemetry`). No credential plugin. `charts/asrs-control/tests/test_kong_config.py` asserts the contract.
+
 ## Local development
 
 `make check-fast`, `make check`, `make check-all`, `make integration` (Docker; the e2e test also needs
