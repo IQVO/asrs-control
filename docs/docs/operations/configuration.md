@@ -70,10 +70,30 @@ stored in Postgres.
 
 ## Helm chart
 
-`charts/asrs-control`: one Deployment (component `api`), a Service, a ConfigMap (the environment above plus
+`charts/asrs-control`: the api Deployment (component `api`), a Service, a ConfigMap (the environment above plus
 `layout.yaml`, mounted read-only at the directory of `config.layoutFile`), a Secret for `DATABASE_URL` when
 `database.url` is set, and a ServiceAccount. The chart refuses to render without a database source, `kafka.brokers` or
 `mqtt.url`, with `replicaCount` other than 1 (the single scheduler, ADR 0002), or with
 `terminationGracePeriodSeconds` below 15. The rollout strategy is `Recreate`. `extraEnv` adds variables, except the four
 observability names the chart renders itself (it refuses them).
-`ci/default-values.yaml` and `ci/all-components-values.yaml` are the lint fixtures.
+`mcp.enabled` and `a2a.enabled` (default false) add the read-only `cmd/mcp` and `cmd/a2a` Deployments and Services
+(8090, 8093; ADR 0005). `ci/default-values.yaml` and `ci/all-components-values.yaml` are the lint fixtures.
+
+## Gateway (Kong)
+
+Routes and plugins live in this chart (fleet decision 2026-10-13), all off by default; warehouse-infra's values switch
+them on and supply the Gateway `parentRefs` and the cors origin. There is no credential plugin on any route (fleet-wide
+revert 2026-09-11).
+
+| Route (HTTPRoute) | Value | Path on Kong | Backend, rewrite |
+| --- | --- | --- | --- |
+| `<release>` (api) | `gatewayApi.enabled`, `gatewayApi.path`, `gatewayApi.parentRefs` | `/api/asrs-control` | Service :80, prefix rewritten to `/` while `gatewayApi.stripPath` |
+| `<release>-mcp` | `mcp.route.enabled` (and `mcp.enabled`), `mcp.route.path` | `/api/mcp/asrs-control` | Service :8090, rewritten to `/mcp` |
+| `<release>-a2a` | `a2a.route.enabled` (and `a2a.enabled`), `a2a.route.path` | `/api/a2a/asrs-control` | Service :8093, rewritten to `/` (card at `/api/a2a/asrs-control/.well-known/agent-card.json`) |
+
+`kongPlugins.cors`, `kongPlugins.prometheus` and `kongPlugins.opentelemetry` render namespace-scoped KongPlugins
+(`templates/kong-plugins.yaml`), named on every route through the `konghq.com/plugins` annotation. cors allows the exact
+`kongPlugins.cors.origin` (never `*`) with the `Idempotency-Key` and `If-Match` request headers and exposes `ETag`,
+`Idempotency-Replayed` and `Mcp-Session-Id`. When agents outside the cluster dial the A2A agent through Kong, set
+`a2a.agentUrl` to the gateway URL so the card advertises it. `tests/test_kong_config.py` is the sensor (run by the
+chart-tests job).

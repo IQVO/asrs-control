@@ -20,6 +20,7 @@ answers from asrs-control's own state through its own use cases, and facts still
 | Probe | `GET /healthz` |
 | Needs | `DATABASE_URL`, `ASRS_LAYOUT_FILE`, `A2A_AGENT_URL`; no Kafka, no MQTT, no write seam, no auth |
 | Deployed by | the chart behind `a2a.enabled` (default off), Service `<release>-a2a:8093`; `A2A_AGENT_URL` defaults to that Service's DNS name |
+| Gateway | `/api/a2a/asrs-control` on Kong, rewritten to `/` (`a2a.route.enabled`, default off); set `a2a.agentUrl` to the gateway URL for callers outside the cluster |
 
 ## Skills
 

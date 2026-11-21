@@ -19,6 +19,7 @@ of the fleet: the in-cluster ClusterIP boundary is the access control.
 | Probe | `GET /healthz` returns `200 {"status":"ok"}` |
 | Needs | `DATABASE_URL` and `ASRS_LAYOUT_FILE`; no Kafka, no MQTT, no write seam |
 | Deployed by | the chart behind `mcp.enabled` (default off), Service `<release>-mcp:8090` |
+| Gateway | `/api/mcp/asrs-control` on Kong, rewritten to `/mcp` (`mcp.route.enabled`, default off) |
 
 Source: `cmd/mcp/main.go`, `cmd/mcp/router.go`, `internal/adapters/inbound/mcp/` (`server.go`, `tools.go`,
 `payloads.go`, `resources.go`, `prompts.go`, `errors.go`). The full advertised registry (descriptions, input and output
