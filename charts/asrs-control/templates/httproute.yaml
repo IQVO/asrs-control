@@ -1,0 +1,48 @@
+{{- if .Values.gatewayApi.enabled -}}
+{{- /*
+REST exposure through the gateway (fleet decision 2026-10-13: gateway config lives in the application charts).
+
+Host contract: /api/asrs-control -> Service asrs-control:80 (cmd/api :8080), prefix rewritten to / while
+gatewayApi.stripPath (cmd/api serves /asrs/..., /healthz and /readyz at the root). /healthz and /readyz become
+reachable through the gateway as /api/asrs-control/healthz: they leak nothing. No credential plugin on the route
+(fleet-wide revert 2026-09-11): access control is the in-cluster boundary.
+*/ -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "asrs-control.fullname" . }}
+  labels:
+    {{- include "asrs-control.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+  {{- with include "asrs-control.kongPluginNames" . }}
+  annotations:
+    konghq.com/plugins: {{ . | quote }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- range .Values.gatewayApi.parentRefs }}
+    - name: {{ required "every Gateway parentRef needs a name (warehouse-infra sets it)" .name }}
+      {{- if .namespace }}
+      namespace: {{ .namespace }}
+      {{- end }}
+      {{- if .sectionName }}
+      sectionName: {{ .sectionName }}
+      {{- end }}
+    {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ .Values.gatewayApi.path }}
+      {{- if .Values.gatewayApi.stripPath }}
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
+      {{- end }}
+      backendRefs:
+        - name: {{ include "asrs-control.fullname" . }}
+          port: {{ .Values.service.port }}
+{{- end }}

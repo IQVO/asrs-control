@@ -9,8 +9,9 @@ container sit inside the AS/RS, and which shuttle-and-lift job runs next?". It o
 port presentation order, reshuffles, PackML equipment state and capacity facts. It does NOT own container contents
 or the stock ledger (inventory-storage), which container moves when (fulfillment-execution, wes-work-planning via
 material-flow-control), transport beyond its ports (material-flow-control, amr-fleet-control) or the AS/RS as a
-building location (facility-layout). Richest aggregate: package `storagejob`. One binary: `cmd/api` (REST on :8080,
-one MQTT link per AS/RS, the outbox relay).
+building location (facility-layout). Richest aggregate: package `storagejob`. Binaries: `cmd/api` (REST on :8080,
+one MQTT link per AS/RS, the outbox relay), and the read-only agent surfaces `cmd/mcp` (MCP, :8090) and `cmd/a2a` (A2A,
+:8093) over the same read use cases (ADR 0005; no write tool or skill without a new ADR, `TestAgentSurfacesAreReadOnly`).
 
 ## Hard rules (each one cost an incident or is fitness-tested)
 
@@ -28,7 +29,7 @@ one MQTT link per AS/RS, the outbox relay).
    local copies (`.claude/rules/fleet/context-boundaries.md`).
 5. **An ADR comes first** for a new cross-context contract or any auth.
    This repo's own rules: (a) the PLC contract is AS/RS telegram protocol v1 of IQVO/equipment-emulator
-   (`docs/telegram-protocol.md` there), Conformist: never change the wire shape here; (b) at most ONE job per aisle
+   (docs/telegram-protocol.md there; asrs-control's side is in apis/asyncapi.yaml), Conformist: never change the wire shape here; (b) at most ONE job per aisle
    unit is in the PLC at a time, and every write locks its aisle (ADR 0002); (c) paho callbacks only enqueue; one
    worker per MQTT link handles up telegrams and retransmit expiries in order; (d) no rack position, reshuffle or
    internal move leaves this context, in REST or in events; (e) one replica only.
@@ -59,7 +60,8 @@ make harness-test # unit-test the agent hooks
 (e.g. `config/layout.example.yaml`) are required; `MIGRATIONS_DATABASE_URL` (direct connection for the
 boot migrations, default `DATABASE_URL`), `ADDR` (default `:8080`), `LOG_LEVEL`, `MQTT_CLIENT_ID`,
 `OUTBOX_INTERVAL_MS`, `OUTBOX_BATCH`, `OUTBOX_MAX_ATTEMPTS`, `VELOCITY_WINDOW_HOURS`, `VELOCITY_FAST_RETRIEVALS`
-are optional. Run the emulator beside it for a PLC.
+and the telemetry variables `OTEL_EXPORTER_OTLP_ENDPOINT` (empty = telemetry off), `OTEL_SERVICE_NAME`,
+`SERVICE_VERSION`, `ENVIRONMENT` (ADR 0004) are optional. Run the emulator beside it for a PLC.
 
 ## Where things are written down (read before editing the matching area)
 
@@ -73,6 +75,12 @@ are optional. Run the emulator beside it for a PLC.
   `.claude/memory/MEMORY.md`: this repo's own durable heuristics.
 - `docs/before-first-release.md`: packaging checklist to finish before the first develop -> main release.
   ADRs are in docs/adr (index.md).
+- `docs/`: the Docusaurus site (pages in `docs/docs/`, ADRs served in place from `docs/adr`), built by
+  `.github/workflows/docs.yml` and published from `main` to https://iqvo.github.io/asrs-control/. After any change to
+  `apis/openapi.yaml` run `cd docs && npm ci && npm run clean-api-docs asrs-control && npm run gen-api-docs asrs-control`
+  and commit `docs/docs/api-reference/rest/` (the `docs-api-drift` CI job fails otherwise); `npm run build` must pass.
+- `apis/asyncapi.yaml` holds BOTH the Kafka CloudEvents channels and the MQTT telegram channels
+  (`asrs/v1/{asrsId}/down|up`, server `plc-link`); the telegram channels mirror equipment-emulator's spec.
 
 harness-template: v4
 

@@ -1,0 +1,74 @@
+---
+id: cancel-storage-job
+title: "Cancel a storage job"
+description: "A queued job is cancelled at once (`200`, status CANCELLED, `StorageJobFailed` reason CANCELLED). A job"
+sidebar_label: "Cancel a storage job"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/asrs-control-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Cancel a storage job"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/asrs/{asrsId}/storage-jobs/{storageJobId}/cancellation"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+A queued job is cancelled at once (`200`, status CANCELLED, `StorageJobFailed` reason CANCELLED). A job
+already with the PLC gets a CANCEL telegram (`202`, status CANCEL_REQUESTED): the PLC's answer decides,
+and a refused cancellation lets the job run to its outcome. A retrieve on its way to the port is
+`409 job-not-cancellable`.
+
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./cancel-storage-job.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./cancel-storage-job.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./cancel-storage-job.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

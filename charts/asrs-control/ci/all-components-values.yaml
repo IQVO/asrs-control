@@ -1,0 +1,93 @@
+# Used by `helm lint` / `ct lint`: every optional value of the chart set at once.
+# asrs-control has the api component plus the two optional read-only agent
+# components (mcp, a2a; ADR 0005), both enabled here, with the three Gateway API
+# routes on (the KongPlugins stay off here; test_kong_config.py switches them on). This file exercises the
+# database from an existing Secret with the migrations key, the MQTT client id,
+# every config.* value, a two-AS/RS layout, extra env, pod annotations/labels and
+# scheduling. Dummy values, no password; nothing here is ever dialled.
+database:
+  existingSecret: "asrs-control-db"
+  existingSecretKey: "DATABASE_URL"
+  migrationsExistingSecretKey: "MIGRATIONS_DATABASE_URL"
+kafka:
+  brokers: "kafka-0.kafka.warehouse-systems.svc.cluster.local:9092,kafka-1.kafka.warehouse-systems.svc.cluster.local:9092"
+mqtt:
+  url: "tcp://mosquitto.warehouse-systems.svc.cluster.local:1883"
+  clientId: "asrs-control-ci"
+config:
+  addr: ":8080"
+  logLevel: "debug"
+  layoutFile: /etc/asrs-control/layout.yaml
+  outboxIntervalMs: "500"
+  outboxBatch: "50"
+  outboxMaxAttempts: "10"
+  velocityWindowHours: "72"
+  velocityFastRetrievals: "5"
+layout:
+  asrs:
+    - id: ASRS1
+      aisles: 2
+      levels: 8
+      slots: 40
+      doubleDeep: true
+      cost: {perLevel: 1.5, perSlot: 0.2}
+      ports:
+        - {id: IN1, aisle: 1, kind: INPUT}
+        - {id: OUT1, aisle: 1, kind: OUTPUT}
+        - {id: IN2, aisle: 2, kind: INPUT}
+        - {id: OUT2, aisle: 2, kind: OUTPUT}
+    - id: ASRS2
+      aisles: 1
+      levels: 4
+      slots: 20
+      doubleDeep: false
+      cost: {perLevel: 1.0, perSlot: 0.1}
+      ports:
+        - {id: IN1, aisle: 1, kind: INPUT}
+        - {id: OUT1, aisle: 1, kind: OUTPUT}
+otel:
+  enabled: true
+  endpoint: "otel-collector.observability.svc.cluster.local:4317"
+  serviceName: "asrs-control-ci"
+environment: "ci"
+serviceVersion: "v0.0.0-ci"
+gatewayApi:
+  enabled: true
+  parentRefs:
+    - name: warehouse-gateway
+      namespace: kong
+      sectionName: http
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    parentRefs:
+      - name: warehouse-gateway
+        namespace: kong
+        sectionName: http
+  extraEnv:
+    - name: GOMAXPROCS
+      value: "1"
+a2a:
+  enabled: true
+  route:
+    enabled: true
+    parentRefs:
+      - name: warehouse-gateway
+        namespace: kong
+        sectionName: http
+  agentUrl: "http://asrs-control-a2a.warehouse-systems.svc.cluster.local:8093/"
+extraEnv:
+  - name: GOMAXPROCS
+    value: "2"
+podAnnotations:
+  example.invalid/ci: "all-components"
+podLabels:
+  example.invalid/tier: wcs
+nodeSelector:
+  kubernetes.io/os: linux
+tolerations:
+  - key: example.invalid/dedicated
+    operator: Equal
+    value: wcs
+    effect: NoSchedule

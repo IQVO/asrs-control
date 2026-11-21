@@ -24,9 +24,10 @@ not a preference — there is nothing to "choose" here:
   `TestNoEventEnvelopeToggleOrFlatEnvelope` fails CI on any of them.
 - Build/validate/(un)marshal with `github.com/cloudevents/sdk-go/v2/event`
   (latest v2) via ONE helper package,
-  internal/adapters/kafka/cloudevents/ — copy it from this template's
-  `templates/cloudevents/cloudevents.go.tmpl` (+ its test) and change only
-  the per-repo constants. Transport stays `segmentio/kafka-go` (no sdk-go
+  `internal/adapters/kafka/cloudevents/` (source `/warehouse/asrs-control`, `wes` segment;
+  it was generated from the fleet template and only its per-repo constants differ). The
+  only producing caller is `internal/adapters/outbound/events` (`Sink.Append`, payloads in
+  `encode.go`), which writes both outbox rows. Transport stays `segmentio/kafka-go` (no sdk-go
   protocol/client packages, no hand-rolled CloudEvent structs).
 - Every produced message carries the Kafka header
   `content-type: application/cloudevents+json; charset=UTF-8`
@@ -53,13 +54,16 @@ not a preference — there is nothing to "choose" here:
   crash, never block the partition, never fall back to parsing a legacy
   shape — anything that fails CloudEvents validation.
 - Tests: a golden exact-JSON test per published `type` (all attributes +
-  the `content-type` header); a legacy-flat-message-rejected test per
-  consumer; Kafka integration tests via testcontainers only.
+  the `content-type` header) in `internal/adapters/outbound/events/golden_test.go`; a
+  legacy-flat-message-rejected test per consumer (none yet); Kafka integration tests via
+  testcontainers only (`internal/testing/kafkatest`).
+- The MQTT telegram channels in `apis/asyncapi.yaml` are NOT CloudEvents: flat JSON of
+  telegram protocol v1 (ADR 0002), the only place a rack position may appear.
 
 Full standard, subdomain table and the fleet's cross-service type
 catalogue: warehouse-docs docs/strategic-design/event-standard-cloudevents.md.
-Record it in this repo as its own ADR "CloudEvents 1.0 as the mandatory
-event envelope" under docs/adr/ (ADR 0003).
+This repo records it as ADR 0003 (`docs/adr/0003-cloudevents-envelope-and-type-catalogue.md`),
+the type catalogue `TestEventCatalogueMatchesContract` checks `apis/asyncapi.yaml` against.
 
 ### Published types
 

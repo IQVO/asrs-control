@@ -1,0 +1,426 @@
+[
+  {
+    "_meta": {
+      "com.warehouse/authority": "L1"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read one AS/RS's capacity snapshot (what AsrsCapacityChanged publishes): units total and available, positions total and free, open external jobs. Read-only; an unknown id fails with asrs-not-found.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "asrsId": {
+          "description": "the AS/RS id of the layout, e.g. ASRS1 (list_asrs names them)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "asrsId"
+      ],
+      "type": "object"
+    },
+    "name": "get_asrs_capacity",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "asrs_id": {
+          "type": "string"
+        },
+        "open_jobs": {
+          "type": "integer"
+        },
+        "positions_free": {
+          "type": "integer"
+        },
+        "positions_total": {
+          "type": "integer"
+        },
+        "units_available": {
+          "type": "integer"
+        },
+        "units_total": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "asrs_id",
+        "units_total",
+        "units_available",
+        "positions_total",
+        "positions_free",
+        "open_jobs"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "_meta": {
+      "com.warehouse/authority": "L1"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read one AS/RS as material-flow-control sees it: per aisle the shuttle-and-lift unit (IDLE, EXECUTE or HELD), whether it is busy, open external jobs and free positions; every port with the container presented at an output port; the recommended input port (the least-loaded available aisle with room; null when none); and the capacity. No rack position is exposed. Read-only; an unknown id fails with asrs-not-found.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "asrsId": {
+          "description": "the AS/RS id of the layout, e.g. ASRS1 (list_asrs names them)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "asrsId"
+      ],
+      "type": "object"
+    },
+    "name": "get_asrs_state",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "aisles": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "aisle": {
+                "type": "integer"
+              },
+              "busy": {
+                "type": "boolean"
+              },
+              "open_jobs": {
+                "type": "integer"
+              },
+              "positions_free": {
+                "type": "integer"
+              },
+              "positions_total": {
+                "type": "integer"
+              },
+              "state": {
+                "type": "string"
+              },
+              "unit_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "aisle",
+              "unit_id",
+              "state",
+              "busy",
+              "open_jobs",
+              "positions_total",
+              "positions_free"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "asrs_id": {
+          "type": "string"
+        },
+        "capacity": {
+          "additionalProperties": false,
+          "properties": {
+            "asrs_id": {
+              "type": "string"
+            },
+            "open_jobs": {
+              "type": "integer"
+            },
+            "positions_free": {
+              "type": "integer"
+            },
+            "positions_total": {
+              "type": "integer"
+            },
+            "units_available": {
+              "type": "integer"
+            },
+            "units_total": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "asrs_id",
+            "units_total",
+            "units_available",
+            "positions_total",
+            "positions_free",
+            "open_jobs"
+          ],
+          "type": "object"
+        },
+        "ports": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "aisle": {
+                "type": "integer"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "port_id": {
+                "type": "string"
+              },
+              "presented_container_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "port_id",
+              "aisle",
+              "kind"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "recommended_input_port_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "asrs_id",
+        "aisles",
+        "ports",
+        "capacity"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "_meta": {
+      "com.warehouse/authority": "L1"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read one STORE or RETRIEVE job: container, port, reference, status (QUEUED, DISPATCHED, ACKNOWLEDGED, CANCEL_REQUESTED, AWAITING_ARRIVAL, DONE, FAILED, CANCELLED), the failure reason and the PLC's reason code, accepted_at and ended_at. Read-only; an unknown id fails with storage-job-not-found.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "asrsId": {
+          "description": "the AS/RS id, e.g. ASRS1",
+          "type": "string"
+        },
+        "storageJobId": {
+          "description": "the storage job id returned when the job was requested, e.g. sj-3f2a",
+          "type": "string"
+        }
+      },
+      "required": [
+        "asrsId",
+        "storageJobId"
+      ],
+      "type": "object"
+    },
+    "name": "get_storage_job",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted_at": {
+          "type": "string"
+        },
+        "asrs_id": {
+          "type": "string"
+        },
+        "container_id": {
+          "type": "string"
+        },
+        "ended_at": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "plc_reason": {
+          "type": "string"
+        },
+        "port_id": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "reference": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "storage_job_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "storage_job_id",
+        "asrs_id",
+        "kind",
+        "container_id",
+        "port_id",
+        "status",
+        "accepted_at"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "_meta": {
+      "com.warehouse/authority": "L1"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List the AS/RS this asrs-control instance controls (the ids of its layout file). Read-only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "name": "list_asrs",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "asrs_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "asrs_ids"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "_meta": {
+      "com.warehouse/authority": "L1"
+    },
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List an AS/RS's STORE and RETRIEVE jobs newest first, optionally of one status, keyset-paged (a page's nextCursor feeds the next call's cursor; empty when there is no further page). Items have the get_storage_job shape. Internal reshuffles are never listed. Read-only.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "asrsId": {
+          "description": "the AS/RS id, e.g. ASRS1",
+          "type": "string"
+        },
+        "cursor": {
+          "description": "optional keyset cursor: the previous page's nextCursor; omitted means the newest page",
+          "type": "string"
+        },
+        "limit": {
+          "description": "optional page size 1..100; omitted means 20",
+          "type": "integer"
+        },
+        "status": {
+          "description": "optional status filter: QUEUED, DISPATCHED, ACKNOWLEDGED, CANCEL_REQUESTED, AWAITING_ARRIVAL, DONE, FAILED or CANCELLED; omitted means every status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "asrsId"
+      ],
+      "type": "object"
+    },
+    "name": "list_storage_jobs",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "accepted_at": {
+                "type": "string"
+              },
+              "asrs_id": {
+                "type": "string"
+              },
+              "container_id": {
+                "type": "string"
+              },
+              "ended_at": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "kind": {
+                "type": "string"
+              },
+              "plc_reason": {
+                "type": "string"
+              },
+              "port_id": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "reference": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "storage_job_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "storage_job_id",
+              "asrs_id",
+              "kind",
+              "container_id",
+              "port_id",
+              "status",
+              "accepted_at"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "nextCursor": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    }
+  }
+]

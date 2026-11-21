@@ -5,8 +5,6 @@ disable-model-invocation: true
 argument-hint: "[git range]"
 ---
 
-<!-- TEMPLATE NOTE (warehouse-harness-template v2): adapt every repo-specific example in this file (file paths, type names, field names) to THIS repo real code. Do not copy-paste verbatim. -->
-
 Perform a pre-commit semantic code review of the current uncommitted
 changes (or, if `$ARGUMENTS` names a branch/commit range, review that
 diff instead — e.g. `/code-review origin/develop..HEAD`).
@@ -19,12 +17,12 @@ linter already catches.
 ## What to look for, in priority order
 
 1. **Domain logic leaking into the wrong layer.** Business rules belong
-   in internal/domain/, not in an HTTP handler, a Kafka consumer, or a
-   repository adapter. If a handler in internal/adapters/inbound/http/
+   in internal/domain/ (`storagemap`, `storagejob`, `equipment`, `scheduling`), not in an
+   HTTP handler, the MQTT link or a repository adapter. If a handler in internal/adapters/inbound/http/
    does anything beyond decode -> call use case -> encode, flag it — that
    logic likely belongs in the use case or the aggregate itself.
 2. **A new use case with no failing-path test.** Check
-   internal/application/usecases/ — every new/changed `Execute` method
+   internal/application/usecases/ — every new/changed `Service` method
    needs a test for its domain-rule failure path, not just the happy
    path. This is the single most common gap `make coverage`'s 90% gate
    still lets through (100% line coverage on the happy path alone often
@@ -38,16 +36,18 @@ linter already catches.
    interface**, or a use case constructing a concrete adapter directly
    instead of depending on a port. Ports contain interfaces only.
 5. **Error handling that swallows or over-wraps.** Check that domain/
-   application errors map cleanly to RFC 7807 problem details at the
-   HTTP boundary (internal/adapters/inbound/http/errors.go's existing
-   mapping table) rather than being stringified/re-wrapped repeatedly on
+   application errors map cleanly to RFC 9457 problem details at the
+   HTTP boundary (`internal/adapters/inbound/http/errors.go` `problemCatalogue`, where every
+   problem also declares its replay class, FINAL or RETRYABLE) rather than being stringified/re-wrapped repeatedly on
    the way out.
-6. **A new Kafka `GroupID` assigned an inline string literal** rather
-   than a named const/var/function call — this fleet has a real incident
-   (wes-work-planning#67) from exactly this pattern; the
-   `TestKafkaConsumerGroupNeverHardcodedInline` fitness test catches it
-   in CI if present, but flag it here too since not every repo has that
-   test yet.
+6. **The telegram rules of ADR 0002.** In `internal/application/usecases/` a PLC command
+   must be appended to the aisle's `cmds` (sent by `inAisle`'s `AfterCommit` hook), never sent
+   through `Downlink` from inside a unit of work; an up-telegram handler must run inside
+   `inAisle` after `Telegrams.Claim`; a job outcome must go through the aggregate
+   (`storagejob.Job.Fail`, `CompleteMotion`, `Present`) so exactly one outcome and its event
+   follow. In `internal/adapters/mqtt/` the paho callback only enqueues. (No Kafka consumer
+   exists here; a new one must not hardcode its `GroupID` inline, see
+   `TestKafkaConsumerGroupNeverHardcodedInline`.)
 7. **A newly reintroduced auth/bearer/JWT check.** Every REST/MCP
    endpoint in this fleet is deliberately unauthenticated (2026-09-11
    fleet-wide revert) — a reintroduced auth check is very likely

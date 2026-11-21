@@ -39,5 +39,9 @@ asrs-control conforms.
 
 - A JOB_DONE the PLC gave up retransmitting while asrs-control was down longer than ~8 s leaves that job
   ACKNOWLEDGED: protocol v1 has no job-state query. A reconciliation telegram needs a protocol v2.
+- A CANCEL the PLC accepted whose ACK — and all its retransmits — are lost leaves the job waiting for an
+  outcome that never comes (the aisle unit stays Busy, the reservation is held): the send failure reverts the
+  cancel, but the PLC may still move the container, so the job is deliberately not auto-failed. Follow-up:
+  reconcile ACKNOWLEDGED jobs against UNIT_STATE / an aisle watchdog.
 - A JOB_FAILED for POSITION_OCCUPIED / CONTAINER_NOT_AT_POSITION means the map disagrees with the rack; the job fails
   `STORAGE_MAP_MISMATCH` and the position is not quarantined.

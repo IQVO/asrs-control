@@ -1,0 +1,194 @@
+# asrs-control: one Deployment (component api), one Service, a ConfigMap (env + layout.yaml),
+# a Secret for the database. Postgres, Kafka and MQTT are mandatory; the chart refuses to
+# render without database and Kafka values.
+
+# Exactly ONE replica: asrs-control is the single scheduler of each AS/RS (ADR 0002). The chart
+# refuses any other value.
+replicaCount: 1
+
+image:
+  repository: ghcr.io/iqvo/asrs-control
+  pullPolicy: IfNotPresent
+  tag: "local"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# Longer than the HTTP drain (10 s) plus a relay pass and the MQTT disconnect.
+terminationGracePeriodSeconds: 30
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+# Gateway API HTTPRoute for the api component (Kong; fleet decision 2026-10-13: routes and plugins live in this
+# chart). Off by default; warehouse-infra switches it on with the Gateway parentRef. Host contract:
+# /api/asrs-control -> Service :80, prefix rewritten to / while stripPath. No credential plugin (fleet-wide revert).
+gatewayApi:
+  enabled: false
+  path: "/api/asrs-control"
+  stripPath: true
+  parentRefs:
+    - name: ""
+      namespace: ""
+      sectionName: "http"
+
+# Namespace-scoped KongPlugins attached to every HTTPRoute of this chart through konghq.com/plugins (see
+# templates/kong-plugins.yaml). All off by default; warehouse-infra's values switch them on. cors.origin is the exact
+# web origin, never "*". No credential plugin, ever.
+kongPlugins:
+  cors:
+    enabled: false
+    origin: "http://localhost"
+  prometheus:
+    enabled: false
+  opentelemetry:
+    enabled: false
+    tracesEndpoint: "http://otel-collector.observability.svc.cluster.local:4318/v1/traces"
+
+database:
+  url: ""
+  existingSecret: ""
+  existingSecretKey: "DATABASE_URL"
+  migrationsExistingSecretKey: "MIGRATIONS_DATABASE_URL"
+
+kafka:
+  brokers: ""
+
+mqtt:
+  url: tcp://mosquitto.warehouse-systems.svc.cluster.local:1883
+  clientId: asrs-control
+
+config:
+  addr: ":8080"
+  logLevel: info
+  layoutFile: /etc/asrs-control/layout.yaml
+  outboxIntervalMs: "250"
+  outboxBatch: "100"
+  outboxMaxAttempts: "20"
+  velocityWindowHours: "168"
+  velocityFastRetrievals: "3"
+
+# Rendered into the ConfigMap as layout.yaml (ADR 0002; the emulator's example AS/RS).
+layout:
+  asrs:
+    - id: ASRS1
+      aisles: 2
+      levels: 8
+      slots: 40
+      doubleDeep: true
+      cost: {perLevel: 1.5, perSlot: 0.2}
+      ports:
+        - {id: IN1, aisle: 1, kind: INPUT}
+        - {id: OUT1, aisle: 1, kind: OUTPUT}
+        - {id: IN2, aisle: 2, kind: INPUT}
+        - {id: OUT2, aisle: 2, kind: OUTPUT}
+
+# OpenTelemetry (ADR 0004, the fleet standard): traces and metrics over OTLP/gRPC to the
+# Collector. otel.enabled renders OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_SERVICE_NAME; disabled
+# (or an empty endpoint) means the binary installs no exporter at all and never dials one.
+otel:
+  enabled: true
+  endpoint: "otel-collector.observability.svc.cluster.local:4317"   # OTEL_EXPORTER_OTLP_ENDPOINT
+  serviceName: "asrs-control"                                         # OTEL_SERVICE_NAME
+
+# ENVIRONMENT: deployment.environment.name on every span and metric (default "local" in the binary).
+environment: "production"
+
+# SERVICE_VERSION: service.version. Empty = image.tag, then the chart appVersion.
+serviceVersion: ""
+
+# Extra env vars appended to the container. The chart refuses the names it renders itself
+# (the observability env above): set those through their values.
+extraEnv: []
+
+# Read-only MCP server (cmd/mcp, ADR 0005): Streamable HTTP at /mcp on :8090, stateless, NO auth
+# (the ClusterIP boundary is the access control). Off by default; warehouse-infra switches it on.
+mcp:
+  enabled: false
+  replicaCount: 1
+  httpAddr: ":8090"            # MCP_ADDR
+  service:
+    type: ClusterIP
+    port: 8090
+    targetPort: 8090
+  # Kong exposure: /api/mcp/asrs-control -> Service :8090, prefix rewritten to /mcp. Needs the Gateway parentRef of
+  # the environment that deploys the chart.
+  route:
+    enabled: false
+    path: "/api/mcp/asrs-control"
+    parentRefs:
+      - name: ""
+        namespace: ""
+        sectionName: "http"
+  extraEnv: []
+  resources:
+    limits: {cpu: 250m, memory: 128Mi}
+    requests: {cpu: 20m, memory: 32Mi}
+
+# Read-only A2A agent (cmd/a2a, ADR 0005): JSON-RPC at / and /a2a on :8093, the Agent Card at
+# /.well-known/agent-card.json, NO auth. agentUrl (A2A_AGENT_URL) is the URL the card advertises;
+# empty = this release's in-cluster Service DNS name. Off by default.
+a2a:
+  enabled: false
+  replicaCount: 1
+  httpAddr: ":8093"            # A2A_ADDR
+  agentUrl: ""
+  service:
+    type: ClusterIP
+    port: 8093
+    targetPort: 8093
+  # Kong exposure: /api/a2a/asrs-control -> Service :8093, prefix rewritten to /. Needs the Gateway parentRef.
+  route:
+    enabled: false
+    path: "/api/a2a/asrs-control"
+    parentRefs:
+      - name: ""
+        namespace: ""
+        sectionName: "http"
+  extraEnv: []
+  resources:
+    limits: {cpu: 250m, memory: 128Mi}
+    requests: {cpu: 20m, memory: 32Mi}
+
+livenessProbe:
+  httpGet: {path: /healthz, port: http}
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet: {path: /readyz, port: http}
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+resources:
+  limits: {cpu: 500m, memory: 256Mi}
+  requests: {cpu: 50m, memory: 64Mi}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

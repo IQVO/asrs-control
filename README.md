@@ -1,85 +1,150 @@
-# warehouse-harness-template
+# asrs-control
 
-Canonical `harness-template: v4` for the [warehouse-systems](https://github.com/IQVO)
-fleet's Go bounded-context services: `Makefile`, CI workflow, lefthook
-hooks, linter/mutation-testing config, architecture fitness tests
-(hexagonal dependency rules + fleet-wide invariants learned from real
-incidents), `.claude/` guides (rules, skills, commands, subagents), and
-`.claude/memory/`, `tools/harness_probe.py`, `benchmarks/wms-bench/` —
-the v4 pieces that close the gaps found comparing this harness against
-Google-Research's Harness² (see HARNESS.md's "Harness² comparison (v4)").
-
-This is a **template, not a runnable service** — it has no domain code,
-no `cmd/`, no OpenAPI spec. It exists to answer one question for every
-new (or drifting) bounded-context repo in the fleet: **what harness
-should this repo have, and why?**
-
-Start with [`HARNESS.md`](HARNESS.md) — it documents every sensor's
-purpose, cost, and lifecycle position, and the specific incident each
-architecture fitness test was written to prevent from recurring.
-
-## Instantiating this template into a new (or existing) repo
-
-```bash
-git clone https://github.com/IQVO/warehouse-harness-template <new-repo>
-cd <new-repo>
-rm -rf .git && git init
-bash scripts/new-service.sh <service-name> <richest-domain-aggregate-pkg> [<wms|wes> <event-context>]
-```
-
-Kafka-publishing/consuming services pass the last two arguments: the
-script then generates the fleet-mandatory CloudEvents 1.0 helper
-(`internal/adapters/kafka/cloudevents/`). CloudEvents is the only event
-envelope in this fleet — there is no flat/dual mode to configure.
-
-See `scripts/new-service.sh`'s header comment, or `HARNESS.md`'s
-"Instantiating this template" section, for the full checklist —
-substitution is only step one; `.claude/rules/*.md` content and
-`.gremlins.yaml`'s measured thresholds still need real code to fill in.
-A fresh scaffold also ships the runtime-binary and repo-root layout sensors
-(`internal/architecture/`) and a generated `Dockerfile`, `.dockerignore` and
-`docs/before-first-release.md`: work through that checklist before the first
-release.
+`asrs-control` is the AS/RS controller bounded context of the warehouse-systems WCS tier: it owns where each
+container sits inside the automated storage and retrieval system (rack positions per aisle), assigns storage
+positions by velocity zone with double-deep depth rules, schedules store and retrieve jobs one at a time per aisle
+unit, presents retrieved containers at output ports in request order, reshuffles blocking containers, and tracks
+PackML equipment state and capacity. It does not own container contents or the stock ledger (inventory-storage),
+which container moves when (fulfillment-execution and wes-work-planning, through material-flow-control), transport
+beyond its ports (material-flow-control, amr-fleet-control) or the AS/RS as a building location (facility-layout).
+Classification: Generic, built behind the subsystem-controller interface so a vendor controller could replace it.
 
 ## Disclaimer
 
-This project is a domain-driven design study. It is not associated with,
-endorsed by or affiliated with any company, and it uses no company's code,
-data, logos or trademarks. All names, figures and examples are illustrative
-or synthetic.
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
 
 ## Documentation
 
-The template's own harness reference is [HARNESS.md](HARNESS.md) (every
-sensor's purpose, cost and lifecycle position). The fleet README standard and
-the other fleet rules this template delivers live in warehouse-docs
-(<https://iqvo.github.io/warehouse-docs/>) under agents/fleet — this repo
-carries their canonical copies under `.claude/rules/fleet/`.
+The documentation site is built from `docs/` (Docusaurus) and published to
+[iqvo.github.io/asrs-control](https://iqvo.github.io/asrs-control/) from `main` by `.github/workflows/docs.yml`
+(pull requests only build it). The strategic design is the warehouse-docs WCS section:
+[asrs-control](https://iqvo.github.io/warehouse-docs/wcs/asrs-control).
 
-## Agent authority fitness tests
+| Page | What it holds |
+| --- | --- |
+| `docs/docs/overview/` | introduction, architecture, quickstart |
+| `docs/docs/operations/` | configuration, runbook, observability, troubleshooting |
+| `docs/docs/development/testing.md` | test layers, make targets, CI jobs |
+| `docs/docs/ddd/` | ubiquitous language, use cases, classification and the ddd-crew artifact pack |
+| `docs/docs/api-reference/` | API overview, the REST reference generated from `apis/openapi.yaml`, the event and telegram catalogue |
+| `docs/docs/ecosystem/integration.md` | neighbours, topics, broker, what is not wired yet |
+| `docs/docs/mcp/tools.md`, `docs/docs/a2a/agent.md` | the read-only MCP server and A2A agent |
+| `docs/adr/` | ADR 0001 (the context), 0002 (telegram conformance, the layout file, one job per aisle unit), 0003 (CloudEvents and the type catalogue), 0004 (OpenTelemetry), 0005 (the read-only MCP server and A2A agent), served on the site under `/docs/adr` |
+| `apis/openapi.yaml` | the REST subsystem-controller interface |
+| `apis/asyncapi.yaml` | the five published events (Kafka) and the telegram protocol v1 channels to the PLC (MQTT) |
+| `config/layout.example.yaml` | the layout file format |
+| `SPEC.md` | the long description of what is built and what is planned |
 
-`internal/architecture/mcp_authority_fitness_test.go` is the portable, static
-check for the fleet rule `agent-authority`: every MCP tool and A2A skill
-declares a level L1..L4, write tools are at least L3, and an MCP server offers
-at least one resource and one prompt. It skips on a service with no MCP/A2A
-adapter. A repo not yet rolled parks only the resource/prompt check with a
-one-line file `internal/adapters/inbound/mcp/.agent-surface-pending`; L4
-needs a `//authority:L4 ADR-<n> ...` comment. Details and the accepted
-declaration shape: HARNESS.md, "Agent authority declarations". The file is
-copied per repo in a rollout wave (it is not in `MANAGED`).
+## Architecture
 
-## Local development / quality gate
+Hexagonal, enforced by `internal/architecture/architecture_test.go` (arch-go):
 
-`make check` runs the template's self-test (the same target new services
-inherit); lefthook runs fmt/lint/vet on pre-commit and the full check on
-pre-push.
+    cmd/api                      composition root (cmd/mcp, cmd/a2a: the read-only agent binaries)
+    internal/domain/             layout, storagemap, storagejob, equipment, capacity, scheduling
+    internal/application/        ports, usecases (one Service, every write in one aisle unit of work), outbox
+    internal/adapters/inbound/http   REST
+    internal/adapters/inbound/mcp, a2a   the read-only MCP server and A2A agent (ADR 0005)
+    internal/adapters/mqtt + telegram  the PLC link (telegram protocol v1)
+    internal/adapters/outbound/  postgres, events, outbox relay, kafka, memory (test doubles), system
+
+## Domain events / Integration
+
+Publishes CloudEvents 1.0 (`com.warehouse.wes.asrs-control.<entity>.<EventName>`) to
+`warehouse.asrs-control.events` and `warehouse.asrs-control.analytics`, for example
+`com.warehouse.wes.asrs-control.storagejob.ContainerPresentedAtPort`. Five types: ContainerStored,
+ContainerPresentedAtPort, StorageJobFailed (storagejob), EquipmentStateChanged (equipmentunit), AsrsCapacityChanged
+(asrs). Consumes nothing from Kafka. Speaks AS/RS telegram protocol v1 (IQVO/equipment-emulator
+`docs/telegram-protocol.md`) on `asrs/v1/<asrsId>/down` and `/up`, described in `apis/asyncapi.yaml` (server
+`plc-link`).
+
+## Running it
+
+`cmd/api` (HTTP on `:8080`):
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `DATABASE_URL` | required | Postgres DSN (migrations run at boot) |
+| `MIGRATIONS_DATABASE_URL` | `DATABASE_URL` | direct connection for golang-migrate |
+| `KAFKA_BROKERS` | required | comma-separated brokers |
+| `MQTT_URL` | required | the broker of the PLC link |
+| `ASRS_LAYOUT_FILE` | required | the layout YAML (ADR 0002) |
+| `MQTT_CLIENT_ID` | `asrs-control` | client id prefix (`<prefix>-<asrsId>`) |
+| `ADDR` | `:8080` | listen address |
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
+| `OUTBOX_INTERVAL_MS` / `OUTBOX_BATCH` / `OUTBOX_MAX_ATTEMPTS` | `250` / `100` / `20` | relay tuning |
+| `VELOCITY_WINDOW_HOURS` / `VELOCITY_FAST_RETRIEVALS` | `168` / `3` | FAST/SLOW classification |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | empty (telemetry off) | Collector OTLP/gRPC endpoint, `host:port` or URL |
+| `OTEL_SERVICE_NAME` / `SERVICE_VERSION` / `ENVIRONMENT` | `asrs-control` / `dev` / `local` | `service.name`, `service.version`, `deployment.environment.name` |
+
+## Observability
+
+The fleet OpenTelemetry standard ([ADR 0004](docs/adr/0004-adopt-the-fleet-opentelemetry-standard.md)): OTLP/gRPC traces
+and metrics to the Collector when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (empty = telemetry off), JSON logs on stdout with
+`trace_id`/`span_id`. Spans: a server span per REST route (otelchi), one per MQTT telegram
+(`asrs/v1/<asrsId>/down publish`, `asrs/v1/<asrsId>/up process`; telegram id and type only), and one
+`<topic> publish` per outbox row (the stored `traceparent` links it to the request or telegram that wrote it). Metrics:
+`http.server.request.duration`, Go runtime, `asrs_control.storage_jobs.{accepted,completed,failed}`,
+`asrs_control.storage_job.duration`, `asrs_control.telegrams.retransmitted`, `asrs_control.outbox.{backlog,lag}`. Details:
+[Observability](docs/docs/operations/observability.md).
+
+## API
+
+| Route | Purpose |
+| --- | --- |
+| `GET /asrs/{asrsId}` | aisles, ports, recommended input port, capacity |
+| `POST /asrs/{asrsId}/storage-jobs` | request a STORE or a RETRIEVE (202) |
+| `GET /asrs/{asrsId}/storage-jobs/{storageJobId}` | read a job |
+| `POST /asrs/{asrsId}/storage-jobs/{storageJobId}/cancellation` | cancel (200 cancelled, 202 asked the PLC) |
+| `POST /asrs/{asrsId}/ports/{portId}/pickups` | confirm a container left an output port |
+
+Every POST takes `Idempotency-Key`; 2xx and FINAL refusals replay for 24 hours with `Idempotency-Replayed: true`,
+RETRYABLE refusals release the key (the class of every problem type is listed in `apis/openapi.yaml`). Errors are
+`application/problem+json` with a `code`. No authentication (fleet rule).
+
+## Agent surfaces (MCP and A2A)
+
+Two read-only binaries over the same read use cases ([ADR 0005](docs/adr/0005-read-only-mcp-server-and-a2a-agent.md)),
+unauthenticated, with no write seam, no MQTT and no Kafka:
+
+- `cmd/mcp`: an MCP server, Streamable HTTP only and stateless, on `:8090` (`/mcp`). Five L1 tools (`list_asrs`,
+  `get_asrs_state`, `get_asrs_capacity`, `get_storage_job`, `list_storage_jobs` keyset-paged), the resource template
+  `warehouse://asrs-control/asrs/{asrsId}/storage-jobs/{storageJobId}` and the `review_storage_job` prompt
+  ([docs](docs/docs/mcp/tools.md)).
+- `cmd/a2a`: an A2A agent, JSON-RPC on `:8093`, Agent Card at `/.well-known/agent-card.json`, skills `job_status` and
+  `asrs_capacity` at L1 ([docs](docs/docs/a2a/agent.md)).
+
+Requesting, cancelling and confirming pickups stay on REST.
+
+## Helm chart
+
+`charts/asrs-control` (lint fixtures `ci/default-values.yaml` and `ci/all-components-values.yaml`): one Deployment (component `api`, exactly one replica, Recreate), a Service, a ConfigMap with
+the environment and `layout.yaml`, and a Secret for `DATABASE_URL`. `mcp.enabled` and `a2a.enabled` (default false) add
+the read-only `cmd/mcp` and `cmd/a2a` Deployments and Services (8090, 8093). `database.url` (or `database.existingSecret`)
+and `kafka.brokers` are mandatory.
+
+Kong (fleet decision 2026-10-13: routes and plugins in the chart, all off by default, switched on by warehouse-infra):
+Gateway API HTTPRoutes `/api/asrs-control` (api, rewritten to `/`), `/api/mcp/asrs-control` (rewritten to `/mcp`) and
+`/api/a2a/asrs-control` (rewritten to `/`), each annotated with the chart's KongPlugins (`kongPlugins.cors` with the exact
+origin, `Idempotency-Key`/`If-Match` allowed and `ETag`/`Idempotency-Replayed`/`Mcp-Session-Id` exposed, `prometheus`,
+`opentelemetry`). No credential plugin. `charts/asrs-control/tests/test_kong_config.py` asserts the contract.
+
+## Local development
+
+`make check-fast`, `make check`, `make check-all`, `make integration` (Docker; the e2e test also needs
+`docker build -t equipment-emulator:e2e <equipment-emulator checkout>`), `make mutation`.
 
 ## Tests
 
-The template ships the architecture fitness tests and harness sensors a new
-service starts from (see HARNESS.md); CI runs the self-test workflow on every
-PR.
+Unit and BDD (`features/asrs_control.feature`, `make bdd`), integration (`//go:build integration`: Postgres
+repositories, the MQTT link against Mosquitto, the end-to-end test against the emulator). CI jobs: lint, guide-lint,
+complexity, file-length, test, bdd, integration, mutation-fast, mutation, drift, api-lint, vuln, docs-api-drift,
+helm-lint, chart-tests, arch-test, spec-breaking, trivy-scan, docker-publish, release; `.github/workflows/docs.yml`
+builds the documentation site.
+
+## Architecture Decision Records
+
+5 ADRs, indexed in `docs/adr/index.md`.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+See `LICENSE`.
