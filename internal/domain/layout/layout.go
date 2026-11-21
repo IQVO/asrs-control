@@ -78,14 +78,18 @@ func (l Layout) validatePorts() error {
 	seen := map[string]bool{}
 	in, out := map[int]bool{}, map[int]bool{}
 	for _, p := range l.Ports {
-		switch {
-		case !idPattern.MatchString(p.ID):
+		// An if-chain, not a tagless switch: Go's cover profile does not instrument `case`
+		// expressions, so gremlins would report their mutants NOT COVERED (MUTATION.md).
+		if !idPattern.MatchString(p.ID) {
 			return fmt.Errorf("%w: %s: port id %q must be 1 to 32 letters, digits, '-' or '_'", ErrInvalidLayout, l.ID, p.ID)
-		case seen[p.ID]:
+		}
+		if seen[p.ID] {
 			return fmt.Errorf("%w: %s: port %s is declared twice", ErrInvalidLayout, l.ID, p.ID)
-		case p.Aisle < 1 || p.Aisle > l.Aisles:
+		}
+		if p.Aisle < 1 || p.Aisle > l.Aisles {
 			return fmt.Errorf("%w: %s: port %s is outside the aisles", ErrInvalidLayout, l.ID, p.ID)
-		case p.Kind != PortInput && p.Kind != PortOutput:
+		}
+		if p.Kind != PortInput && p.Kind != PortOutput {
 			return fmt.Errorf("%w: %s: port %s has kind %q, want INPUT or OUTPUT", ErrInvalidLayout, l.ID, p.ID, p.Kind)
 		}
 		seen[p.ID] = true
