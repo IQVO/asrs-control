@@ -74,29 +74,37 @@ func (l Layout) Validate() error {
 	return l.validatePorts()
 }
 
+// aisleKind is one aisle's ports of one kind.
+type aisleKind struct {
+	aisle int
+	kind  PortKind
+}
+
 func (l Layout) validatePorts() error {
 	seen := map[string]bool{}
-	in, out := map[int]bool{}, map[int]bool{}
+	// Keyed by aisle AND kind: an if/else on the kind filling an in-set and an out-set made
+	// its negation an equivalent mutant (the both-kinds check below is symmetric). MUTATION.md.
+	has := map[aisleKind]bool{}
 	for _, p := range l.Ports {
-		switch {
-		case !idPattern.MatchString(p.ID):
+		// An if-chain, not a tagless switch: Go's cover profile does not instrument `case`
+		// expressions, so gremlins would report their mutants NOT COVERED (MUTATION.md).
+		if !idPattern.MatchString(p.ID) {
 			return fmt.Errorf("%w: %s: port id %q must be 1 to 32 letters, digits, '-' or '_'", ErrInvalidLayout, l.ID, p.ID)
-		case seen[p.ID]:
+		}
+		if seen[p.ID] {
 			return fmt.Errorf("%w: %s: port %s is declared twice", ErrInvalidLayout, l.ID, p.ID)
-		case p.Aisle < 1 || p.Aisle > l.Aisles:
+		}
+		if p.Aisle < 1 || p.Aisle > l.Aisles {
 			return fmt.Errorf("%w: %s: port %s is outside the aisles", ErrInvalidLayout, l.ID, p.ID)
-		case p.Kind != PortInput && p.Kind != PortOutput:
+		}
+		if p.Kind != PortInput && p.Kind != PortOutput {
 			return fmt.Errorf("%w: %s: port %s has kind %q, want INPUT or OUTPUT", ErrInvalidLayout, l.ID, p.ID, p.Kind)
 		}
 		seen[p.ID] = true
-		if p.Kind == PortInput {
-			in[p.Aisle] = true
-		} else {
-			out[p.Aisle] = true
-		}
+		has[aisleKind{p.Aisle, p.Kind}] = true
 	}
 	for a := 1; a <= l.Aisles; a++ {
-		if !in[a] || !out[a] {
+		if !has[aisleKind{a, PortInput}] || !has[aisleKind{a, PortOutput}] {
 			return fmt.Errorf("%w: %s: aisle %d needs at least one INPUT and one OUTPUT port", ErrInvalidLayout, l.ID, a)
 		}
 	}

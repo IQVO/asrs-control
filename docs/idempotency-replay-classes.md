@@ -118,7 +118,8 @@ executes twice (RETRYABLE, any 5xx); FINAL replays with the header and the same 
 is the reuse conflict; OUTCOME commits its write once and a replay records nothing new; RETRYABLE
 releases the key (no row), the retry runs and then succeeds and is stored, and another body under the
 released key is a new request; 2xx is stored; 5xx and a panic are not. Concurrency is not covered by
-the template (a concurrent duplicate waiting on the key and replaying is the store's own test).
+the template (a concurrent duplicate waiting on the key and replaying is the store's own test); see
+"In-flight duplicates" below for what this repo's middleware does and which tests pin it.
 
 ## Per-design notes (phase 0, 40 repos read on 2026-11-18)
 
@@ -146,6 +147,42 @@ the template (a concurrent duplicate waiting on the key and replaying is the sto
   stored refusal.
 - **Spec text that says 4xx are replayed must change** (OpenAPI descriptions of the header, ADRs,
   README, runbooks, consumer clients that treat a 409 or 422 as terminal).
+
+## In-flight duplicates: re-read the key before an unstored refusal (asrs-control)
+
+N copies of one keyed request are one run and N-1 replays, also when the copies arrive while the
+first is still in flight. asrs-control's middleware looks the key up BEFORE its unit of work, and the
+row locks that serialise a request (the aisle's `storage_maps ... FOR UPDATE`, the unit's
+`equipment_units ... FOR UPDATE`, `asrs_capacity ... FOR UPDATE`) are taken INSIDE the use case. A
+same-key/same-body copy that arrives while the original holds the aisle lock therefore passes the
+Lookup (nothing is committed yet), queues on the lock, and decides only after the original committed
+its job and its key row. Its answer is then a RETRYABLE refusal (`container-busy`,
+`container-already-stored`) that is never stored, so without a re-read the client got `422` instead of
+the original's `202` (fleet audit 2026-11-21, defect 1).
+
+The rule: **before answering any refusal that is not stored (RETRYABLE, or a 5xx), the middleware
+re-reads the key inside the 24-hour window** (`finishRefused`,
+`internal/adapters/inbound/http/idempotency.go`):
+
+- found, same fingerprint: the stored answer is replayed with `Idempotency-Replayed: true`;
+- found, another fingerprint: `409 idempotency-key-reused`;
+- not found, or older than 24 hours: the request's own refusal goes out and the key stays released;
+- the re-read fails: logged at WARN (`idempotency: re-read before an unstored refusal failed`), and the
+  request's own refusal goes out.
+
+Re-reading after the rollback is equivalent to re-reading under the lock: the refusal rolled back every
+write and dropped every PLC command hook, so nothing of the duplicate's run survives. A 2xx, FINAL or
+OUTCOME duplicate was already safe (its save loses to the original's key row and the re-read after the
+save replays it). A re-read at the START of the unit of work (amr-fleet-control's shape) would not help
+here: the unit takes no lock when it begins, so under READ COMMITTED that read runs before the original
+commits and finds nothing.
+
+Tests: `internal/testing/pgusecases/inflight_duplicate_integration_test.go` (real router, middleware
+and Postgres: the original parks inside its unit of work holding the aisle lock, the duplicate is a
+`pg_stat_activity` lock waiter, the original commits; the duplicate must replay the 202, one key row,
+one job) and `internal/adapters/inbound/http/idempotency_inflight_test.go` (a blind first Lookup over
+the memory store: RETRYABLE and 5xx duplicates replay, another body is `idempotency-key-reused`, the
+24-hour window holds at its edge, and a failed re-read is logged at WARN).
 
 ## Gate
 

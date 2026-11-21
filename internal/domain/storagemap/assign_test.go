@@ -208,3 +208,39 @@ func TestReserveRetrieveAndReshuffleExcludeEachOther(t *testing.T) {
 		t.Fatalf("reshuffle of a retrieving blocker = %v, want ErrContainerBusy", err)
 	}
 }
+
+// A cost tie keeps the lower level, whatever the slots say: L1-S2 and L2-S1 both cost 3.
+func TestFastBreaksACostTieByTheLowerLevel(t *testing.T) {
+	m := storagemap.New(grid(layout.Cost{PerLevel: 1, PerSlot: 1}), 1)
+	stored(t, m, "j1", "X", storagemap.Fast) // L1-S1-D1 (cost 2)
+	if p := assign(t, m, storagemap.Fast); p != at(1, 2, 1) {
+		t.Errorf("Fast after L1-S1 = %s, want A1-L1-S2-D1 (cost 3, ties L2-S1 on the lower level)", p)
+	}
+}
+
+// The dearest tie keeps the lower level too: L1-S3 and L2-S2 both cost 4 once L2-S3 is taken.
+func TestSlowBreaksACostTieByTheLowerLevel(t *testing.T) {
+	m := storagemap.New(grid(layout.Cost{PerLevel: 1, PerSlot: 1}), 1)
+	stored(t, m, "j1", "X", storagemap.Slow) // L2-S3-D2 (cost 5)
+	if p := assign(t, m, storagemap.Slow); p != at(1, 3, 2) {
+		t.Errorf("Slow after L2-S3 = %s, want A1-L1-S3-D2 (cost 4, ties L2-S2 on the lower level)", p)
+	}
+}
+
+// Only the blocked slot itself is excluded: the same slot on another level is a valid target,
+// and here the cheapest one (a level costs 1, a slot 10: L2-S1 = 12 < L1-S2 = 21).
+func TestPlanReshuffleMayUseTheSameSlotOnAnotherLevel(t *testing.T) {
+	l := grid(layout.Cost{PerLevel: 1, PerSlot: 10})
+	m, err := storagemap.Rehydrate(l, storagemap.Snapshot{Aisle: 1,
+		Occupied: map[layout.Position]string{at(1, 1, 2): "A", at(1, 1, 1): "C"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, from, to, err := m.PlanReshuffle("r1", at(1, 1, 2), storagemap.Fast)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c != "C" || from != at(1, 1, 1) || to != at(2, 1, 1) {
+		t.Fatalf("reshuffle = %s %s -> %s, want C A1-L1-S1-D1 -> A1-L2-S1-D1", c, from, to)
+	}
+}

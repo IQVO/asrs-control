@@ -16,8 +16,8 @@ flowchart LR
   classDef evt fill:#fed7aa,stroke:#c2410c,color:#111
   classDef pol fill:#e9d5ff,stroke:#7e22ce,color:#111
   classDef ext fill:#fbcfe8,stroke:#be185d,color:#111
-  MFC[material-flow-control]:::ext --> RS[Request store]:::cmd --> JA[Store job accepted, position reserved]:::evt
-  MFC --> RR[Request retrieve]:::cmd --> RA[Retrieve job accepted]:::evt
+  MFC[material-flow-control]:::ext --> RS[Request store]:::cmd --> JA[Store job accepted, position reserved — internal]:::evt
+  MFC --> RR[Request retrieve]:::cmd --> RA[Retrieve job accepted — internal]:::evt
   JA --> SP{{Whenever the aisle unit is free: dispatch the oldest job}}:::pol
   RA --> SP
   SP --> BL{{Blocked back position: reshuffle first}}:::pol --> MV[Container moved, internal]:::evt

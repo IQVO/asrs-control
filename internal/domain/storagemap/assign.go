@@ -42,8 +42,11 @@ func (m *Map) Assign(v Velocity, exclude func(layout.Position) bool) (layout.Pos
 }
 
 // better ranks a before b: the preferred depth first (FAST the front, SLOW the back of a
-// double-deep rack), then travel cost (FAST cheapest, SLOW dearest), then the lower level
-// and slot, so the choice is deterministic.
+// double-deep rack), then travel cost (FAST cheapest, SLOW dearest). Assign sorts stably over
+// AislePositions (level by level, slot by slot, front first), so a cost tie keeps the lower
+// level, then the lower slot, and the choice is deterministic. The tie-break is the sort's
+// stability, not more comparisons: compared only after `ca != cb` / `a.Level != b.Level`,
+// `<` and `<=` are the same answer, so explicit tie-break keys only bred equivalent mutants.
 func (m *Map) better(v Velocity, a, b layout.Position) bool {
 	pref := 1
 	if v == Slow && m.l.DoubleDeep {
@@ -52,17 +55,10 @@ func (m *Map) better(v Velocity, a, b layout.Position) bool {
 	if (a.Depth == pref) != (b.Depth == pref) {
 		return a.Depth == pref
 	}
-	ca, cb := m.l.CostOf(a), m.l.CostOf(b)
-	if ca != cb {
-		if v == Fast {
-			return ca < cb
-		}
-		return ca > cb
+	if v == Fast {
+		return m.l.CostOf(a) < m.l.CostOf(b)
 	}
-	if a.Level != b.Level {
-		return a.Level < b.Level
-	}
-	return a.Slot < b.Slot
+	return m.l.CostOf(a) > m.l.CostOf(b)
 }
 
 // ReserveStore reserves the position a store job will fill.
