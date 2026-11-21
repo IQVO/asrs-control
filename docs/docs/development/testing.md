@@ -16,7 +16,7 @@ description: "The test layers of asrs-control, the make targets, the CI jobs tha
 | Integration | `//go:build integration`: `internal/adapters/outbound/postgres/*_integration_test.go`, `internal/testing/pgusecases`, `internal/adapters/mqtt/link_integration_test.go`, `internal/adapters/outbound/kafka/relay_sink_latency_integration_test.go`, `internal/adapters/inbound/http/idempotency_replay_classes_test.go` | `make integration` (Docker) | real Postgres, Kafka and Mosquitto through testcontainers |
 | End to end | `cmd/api/e2e_emulator_integration_test.go` | `make integration` with `EQUIPMENT_EMULATOR_IMAGE` (`docker build -t equipment-emulator:e2e <equipment-emulator checkout>`) | the whole service against the emulator's PLC |
 | Architecture | `internal/architecture/` | `make arch-test` | layer direction and the fleet fitness rules |
-| Mutation | gremlins, `.gremlins.yaml` | `make mutation` (changed packages), `make mutation-full` | the tests assert, not merely execute |
+| Mutation | gremlins, `.gremlins.yaml` | `make mutation` (every domain package, one run each), `make mutation-full` | the tests assert, not merely execute |
 | Chart | `charts/asrs-control/tests/render_test.sh`, `test_service_selectors.py`, `test_kong_config.py` | `bash charts/asrs-control/tests/render_test.sh`, `python3 charts/asrs-control/tests/test_kong_config.py` | the env ConfigMap is mounted, every env var each binary reads is rendered, the render gates fire, each Service selects its own Deployment, the Kong routes and plugins follow the fleet contract (default off, annotated, no credential plugin, cors headers) |
 | Contracts | Spectral, `asyncapi_breaking.py`, oasdiff | `spectral lint ...`, CI `spec-breaking` | the specs lint and no PR breaks a consumer |
 

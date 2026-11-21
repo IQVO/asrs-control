@@ -32,10 +32,22 @@ unleash:
     # a float type assertion (internal/report/report.go `assess`), so `efficacy: "95"` (a YAML
     # string) is read as 0 and the gate NEVER fails. Verified: a package at 95.24% efficacy exits 0
     # with "99" and exits 10 with 99.
-    # Measured 2026-11-20 (Task 16 packaging), threshold = floor(lower of the two runs) - 1 so
-    # both targets pass:
+    # Measured 2026-11-20 (Task 16 packaging), before the ratchet:
     #   make mutation       (./internal/domain/storagejob): efficacy 100.00%, mutant coverage 93.55%
     #   make mutation-full  (./internal/domain):            efficacy 94.77%, mutant coverage 95.56%
-    # => efficacy 93, mutant-coverage 92.
-    efficacy: 93
-    mutant-coverage: 92
+    #                       (163 killed, 9 lived, 8 not covered, 3 timed out)
+    # => were efficacy 93, mutant-coverage 92.
+    #
+    # Re-measured 2026-11-20 after the mutation ratchet (MUTATION.md: the 9 survivors killed by
+    # tests, the 8 NOT COVERED tagless-switch cases rewritten as if-chains, two equivalent-mutant
+    # shapes restructured away), gremlins v0.6.0, `go clean -testcache` first:
+    #   make mutation       (each ./internal/domain/*/ package, one run each, = CI mutation-fast):
+    #     capacity 1/1, equipment 7/7, layout 57/57, scheduling 5/5, storagejob 31/31,
+    #     storagemap 72/72 killed -- every package efficacy 100.00%, mutant coverage 100.00%
+    #   make mutation-full  (./internal/domain): 173 killed, 0 lived, 0 not covered, 3 timed out
+    #                       (layout.AislePositions' runaway loop mutants), efficacy 100.00%,
+    #                       mutant coverage 100.00%
+    # => efficacy 99, mutant-coverage 99: the fleet target. gremlins fails at measured <= 99,
+    # so one surviving or uncovered mutant in a package of fewer than 100 mutants fails the gate.
+    efficacy: 99
+    mutant-coverage: 99

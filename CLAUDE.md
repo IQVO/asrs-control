@@ -51,7 +51,7 @@ make check-fast   # fmt-check + vet + arch-test: run before saying "done"
 make check        # fmt-check vet build lint test
 make check-all    # check + coverage + arch-test + bdd (the full local gate)
 make integration  # real Postgres/Kafka via testcontainers (needs Docker)
-make mutation     # gremlins on the richest aggregate (thresholds in .gremlins.yaml, measured first)
+make mutation     # gremlins on every domain package (thresholds in .gremlins.yaml, measured first)
 make guide-lint   # these guides: skills load, references resolve, context budget
 make harness-test # unit-test the agent hooks
 ```
