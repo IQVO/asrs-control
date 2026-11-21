@@ -78,6 +78,12 @@ stored in Postgres.
 observability names the chart renders itself (it refuses them).
 `mcp.enabled` and `a2a.enabled` (default false) add the read-only `cmd/mcp` and `cmd/a2a` Deployments and Services
 (8090, 8093; ADR 0005). `ci/default-values.yaml` and `ci/all-components-values.yaml` are the lint fixtures.
+`agents.colocate` (default false; capacity step 3, warehouse-infra ADR 0012) with both `mcp.enabled` and `a2a.enabled`
+renders ONE `<release>-agents` Deployment with the two containers `mcp` (:8090) and `a2a` (:8093) instead of the two
+standalone Deployments: same binaries, env, probes and resources, port names `mcp` / `a2a`. The `<release>-mcp` and
+`<release>-a2a` Services keep their names and ports and select the agents pod; routes are unchanged. Readiness is then
+pod-wide (either container unready removes both endpoints). `agents.strategy` overrides the rollout strategy
+(`{}` = RollingUpdate). `tests/test_agents_colocation.py` guards it.
 
 ## Gateway (Kong)
 

@@ -24,6 +24,15 @@
 {{- printf "%s-a2a" (include "asrs-control.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{/* agents.colocate (warehouse-infra ADR 0012): "true" iff colocate, mcp and a2a are all on; else empty. */}}
+{{- define "asrs-control.agentsColocated" -}}
+{{- if and (.Values.agents | default dict).colocate .Values.mcp.enabled .Values.a2a.enabled }}true{{ end -}}
+{{- end }}
+
+{{- define "asrs-control.agentsFullname" -}}
+{{- printf "%s-agents" (include "asrs-control.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
 {{/*
 The KongPlugins this chart renders, comma-joined for the konghq.com/plugins annotation of every HTTPRoute; empty
 while every kongPlugins block is off, and the routes then carry no annotation.
