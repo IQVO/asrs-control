@@ -24,6 +24,20 @@
 {{- printf "%s-a2a" (include "asrs-control.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{/*
+The KongPlugins this chart renders, comma-joined for the konghq.com/plugins annotation of every HTTPRoute; empty
+while every kongPlugins block is off, and the routes then carry no annotation.
+*/}}
+{{- define "asrs-control.kongPluginNames" -}}
+{{- $names := list -}}
+{{- range $name, $cfg := .Values.kongPlugins -}}
+{{- if $cfg.enabled -}}
+{{- $names = append $names (printf "%s-%s" (include "asrs-control.fullname" $) $name) -}}
+{{- end -}}
+{{- end -}}
+{{- join "," $names -}}
+{{- end -}}
+
 {{- define "asrs-control.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "asrs-control.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
