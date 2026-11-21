@@ -100,16 +100,21 @@ func (j *Job) Present(scanned string, at, plcTime time.Time) ([]any, error) {
 	if j.s.Status != AwaitingArrival {
 		return nil, ErrInvalidTransition
 	}
-	scan := ScanRead
-	switch {
-	case scanned == "":
-		scan = ScanNoRead
-	case scanned != j.s.ContainerID:
-		scan = ScanMismatch
-	}
 	j.end(Done, "", "", at)
 	return []any{ContainerPresentedAtPort{JobID: j.s.ID, AsrsID: j.s.AsrsID, ContainerID: j.s.ContainerID, PortID: j.s.PortID,
-		Reference: j.s.Reference, Scan: scan, ScannedContainerID: scanned, At: at, PLCTime: plcTime, AcceptedAt: j.s.AcceptedAt}}, nil
+		Reference: j.s.Reference, Scan: j.scanOf(scanned), ScannedContainerID: scanned, At: at, PLCTime: plcTime, AcceptedAt: j.s.AcceptedAt}}, nil
+}
+
+// scanOf classifies what the output port read. An if-chain, not a tagless switch: Go's cover
+// profile does not instrument `case` expressions, so gremlins would report them NOT COVERED.
+func (j *Job) scanOf(scanned string) ScanResult {
+	if scanned == "" {
+		return ScanNoRead
+	}
+	if scanned != j.s.ContainerID {
+		return ScanMismatch
+	}
+	return ScanRead
 }
 
 // Fail ends an open job with f.

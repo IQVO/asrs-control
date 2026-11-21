@@ -103,6 +103,23 @@ func TestSnapshotRoundTrips(t *testing.T) {
 	}
 }
 
+// A SLOW store reserves a back behind a free front (rule D1 allows it): the snapshot of that
+// state must rehydrate, with the reservation intact.
+func TestRehydrateKeepsAReservedBackBehindAFreeFront(t *testing.T) {
+	m := storagemap.New(tiny(), 1)
+	p, err := m.ReserveStore("j1", "C", storagemap.Slow)
+	if err != nil || p != at(1, 2, 2) {
+		t.Fatalf("ReserveStore = %s, %v; want A1-L1-S2-D2", p, err)
+	}
+	back, err := storagemap.Rehydrate(tiny(), m.Snapshot())
+	if err != nil {
+		t.Fatalf("Rehydrate of a reserved back behind a free front = %v, want nil", err)
+	}
+	if got := back.Snapshot(); got.Reserved[at(1, 2, 2)] != "j1" || got.ReservedContainer[at(1, 2, 2)] != "C" || back.Free() != 3 {
+		t.Fatalf("rehydrated reservation = %+v, free %d; want j1/C on A1-L1-S2-D2, free 3", got, back.Free())
+	}
+}
+
 func reserve(s *storagemap.Snapshot, p layout.Position, job, container string) {
 	if s.ReservedContainer == nil {
 		s.ReservedContainer = map[layout.Position]string{}
