@@ -49,7 +49,12 @@ Kafka (ADR 0003), and the agent contains no outbound A2A client.
 their `cmd/` (`TestMCPAdapterDependencyRule`, `TestA2AAdapterDependencyRule`). Each holds a `Reads` interface over
 `*usecases.Service`, whose method set is pinned by `TestAgentSurfacesAreReadOnly`, an allowlist sensor over the adapter and
 its composition root: only read use cases and the read repositories may be referenced, and no Kafka, outbox, event sink,
-MQTT link, telegram codec, memory double, sibling inbound adapter or A2A client may be imported. The application gains
+MQTT link, telegram codec, memory double, sibling inbound adapter or A2A client may be imported. Since the fleet audit
+of 2026-11-21 the sensor resolves each qualifier through the file's imports (an alias cannot launder a write seam, and
+a dot or aliased import of `usecases`, `ports` or `postgres` is refused), refuses a write method or raw-SQL call on ANY
+value (repository and pool writes, `Query`/`QueryRow`/`Exec`/`Begin`/`Acquire`, and the write use cases of
+`*usecases.Service`) and refuses a raw driver import (`jackc/pgx`, `database/sql`):
+`agent_readonly_methods_fitness_test.go`, bitten by `agent_readonly_hardening_test.go`. The application gains
 three reads for these surfaces: `ListJobs` (over the new `StorageJobs.ListExternal`, external jobs only, newest first),
 `AsrsIDs` and `Capacity`. The composition roots load the same layout file as `cmd/api`, run the idempotent migrations
 and wire the use cases with the Postgres map, job and unit repositories only: no unit of work, outbox, inbox, downlink or

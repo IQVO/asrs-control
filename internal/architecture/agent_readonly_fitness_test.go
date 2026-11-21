@@ -6,12 +6,18 @@ package architecture
 //     layers, and nothing in internal/ depends on it (the MCP twin is TestMCPAdapterDependencyRule).
 //   - TestAgentSurfacesAreReadOnly: an ALLOWLIST sensor over each adapter and its cmd/ composition
 //     root. The adapter's `Reads` seam holds exactly the listed read methods; the only
-//     usecases/ports/postgres identifiers the sources may reference are the read ones; and no
+//     usecases/ports/postgres identifiers the sources may reference are the read ones (a qualifier
+//     is resolved through the file's imports to its import path, so an alias cannot launder a write
+//     seam, and a dot or aliased import of those three packages is itself refused); and no
 //     write-side adapter (Kafka, outbox, events, the MQTT link, the telegram codec, the memory
 //     doubles), no sibling inbound adapter and no outbound A2A client is imported. Allowlist, not
 //     denylist: a new write use case is refused without having to be named here first.
 //   - TestAgentReadOnlySensorBites proves each rule fires on code fixtures, so the sensor cannot
 //     pass vacuously.
+//   - agent_readonly_methods_fitness_test.go: no write METHOD (agentWriteVerbs) is selected on any
+//     value, and no raw driver (pgx, database/sql) is imported. The hardening (fleet audit
+//     2026-11-21, ported from material-flow-control 2556afc / amr-fleet-control 52797e0) is bitten
+//     by agent_readonly_hardening_test.go.
 
 import (
 	"go/ast"
@@ -85,6 +91,8 @@ func agentSourceViolations(s agentSurface, filename string, src any) ([]string, 
 	}
 	out := agentImportViolations(s, f)
 	out = append(out, agentSelectorViolations(f)...)
+	names, _ := agentQualifiers(f)
+	out = append(out, agentWriteMethodViolations(f, names)...)
 	return append(out, agentReadsViolations(s, f)...), nil
 }
 
@@ -107,19 +115,69 @@ func agentImportViolations(s agentSurface, f *ast.File) []string {
 	return out
 }
 
+// agentGuardedPackages maps the import-path suffix of each guarded package to its allowlist key:
+// the allowlist applies by IMPORT PATH, whatever local name a file binds the package to.
+var agentGuardedPackages = map[string]string{
+	"/internal/application/usecases":       "usecases",
+	"/internal/application/ports":          "ports",
+	"/internal/adapters/outbound/postgres": "postgres",
+}
+
+// guardedKey is the allowlist key of an import path, "" when the path is not a guarded package.
+func guardedKey(path string) string {
+	for suffix, key := range agentGuardedPackages {
+		if strings.HasSuffix(path, suffix) {
+			return key
+		}
+	}
+	return ""
+}
+
+// agentQualifiers resolves every local package name of f to its import path (the alias, or the
+// last path element), and refuses a dot or aliased import of a guarded package: a dot import
+// hides every selector the allowlist reads, and an alias only obscures which package a reader sees.
+func agentQualifiers(f *ast.File) (map[string]string, []string) {
+	names, out := map[string]string{}, []string(nil)
+	for _, imp := range f.Imports {
+		path, err := strconv.Unquote(imp.Path.Value)
+		if err != nil {
+			continue
+		}
+		local := path[strings.LastIndex(path, "/")+1:]
+		if imp.Name != nil {
+			local = imp.Name.Name
+		}
+		if key := guardedKey(path); key != "" && imp.Name != nil && local != "_" {
+			if local == "." {
+				out = append(out, "dot-imports "+path+": a guarded package must be referenced as "+key+".<Name>")
+				continue
+			}
+			if local != key {
+				out = append(out, "imports "+path+" as "+local+": a guarded package must keep its name "+key)
+			}
+		}
+		names[local] = path
+	}
+	return names, out
+}
+
 func agentSelectorViolations(f *ast.File) []string {
-	var out []string
+	names, out := agentQualifiers(f)
 	ast.Inspect(f, func(n ast.Node) bool {
 		sel, ok := n.(*ast.SelectorExpr)
 		if !ok {
 			return true
 		}
 		pkg, ok := sel.X.(*ast.Ident)
-		if !ok {
+		if !ok || pkg.Obj != nil { // not a qualifier, or a variable declared in this file
 			return true
 		}
-		if allowed, guarded := agentAllowedSelectors[pkg.Name]; guarded && !slices.Contains(allowed, sel.Sel.Name) {
-			out = append(out, "references "+pkg.Name+"."+sel.Sel.Name+", which is not on the read-only allowlist")
+		key := pkg.Name // a qualifier no import binds (fixtures): judged by its name
+		if path, imported := names[pkg.Name]; imported {
+			key = guardedKey(path)
+		}
+		if allowed, guarded := agentAllowedSelectors[key]; guarded && !slices.Contains(allowed, sel.Sel.Name) {
+			out = append(out, "references "+pkg.Name+"."+sel.Sel.Name+" ("+key+"), which is not on the read-only allowlist")
 		}
 		return true
 	})
@@ -159,6 +217,7 @@ func TestAgentSurfacesAreReadOnly(t *testing.T) {
 			if len(files) == 0 {
 				t.Fatalf("no %s sources under %s; the sensor is looking in the wrong place", s.name, dir)
 			}
+			t.Logf("checking %d %s sources under %s", len(files), s.name, dir)
 			for _, path := range files {
 				for _, v := range agentFileViolations(t, s, path) {
 					t.Errorf("%s %s (ADR 0005: the %s surface is read-only)", path, v, s.name)

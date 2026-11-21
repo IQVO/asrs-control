@@ -41,6 +41,9 @@ any body.
 Every POST requires `Idempotency-Key` (1-128 characters; missing or longer is `400 idempotency-key-required`). A retry
 with the same key and body gets the stored answer with `Idempotency-Replayed: true`; the same key with another body is
 `409 idempotency-key-reused`. Only 2xx and FINAL refusals are stored, for 24 hours; RETRYABLE refusals release the key.
+A copy that arrives while the first request is still in flight waits for it, and before it answers a RETRYABLE (or
+5xx) refusal of its own it re-reads the key: when the first request's answer was stored meanwhile, that answer is
+replayed instead (another body: `409 idempotency-key-reused`).
 
 ## Errors
 
