@@ -10,7 +10,7 @@ description: "How asrs-control fits the warehouse-systems fleet: neighbours, top
 
 | Neighbour | Direction | Contract | State on `develop` |
 | --- | --- | --- | --- |
-| material-flow-control | calls asrs-control's REST; consumes all five events | `apis/openapi.yaml`, `apis/asyncapi.yaml` | material-flow-control is designed (WCS plan 04), not built |
+| material-flow-control | calls asrs-control's REST; consumes all five events | `apis/openapi.yaml`, `apis/asyncapi.yaml` | built (material-flow-control v0.1.0; its asyncapi declares all five types) |
 | AS/RS PLC | MQTT both ways | telegram protocol v1 (`asrs/v1/<asrsId>/down`, `/up`) | equipment-emulator is built; `cmd/api/e2e_emulator_integration_test.go` runs asrs-control against its image |
 | exception-management | consumes `StorageJobFailed` (`EQUIPMENT_FAULT`) | `apis/asyncapi.yaml` | published; not consumed yet |
 | analytics | `warehouse.asrs-control.analytics` | same five events | no consumer yet (the data product slot) |

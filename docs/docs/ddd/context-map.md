@@ -26,7 +26,7 @@ flowchart LR
 
 | # (WCS map) | Neighbour | Pattern | Edge | Status |
 | --- | --- | --- | --- | --- |
-| 5 | material-flow-control | **Customer/Supplier**, asrs-control supplies the subsystem-controller interface | REST `apis/openapi.yaml`; Kafka `warehouse.asrs-control.events` (all five types) | asrs-control side built; material-flow-control is designed (plan 04), not built |
+| 5 | material-flow-control | **Customer/Supplier**, asrs-control supplies the subsystem-controller interface | REST `apis/openapi.yaml`; Kafka `warehouse.asrs-control.events` (all five types) | both sides built (material-flow-control v0.1.0 declares and handles all five types) |
 | 7 | AS/RS PLC (equipment-emulator) | **Conformist** to telegram protocol v1 | MQTT `asrs/v1/<asrsId>/down` and `/up` | built, end-to-end tested against the emulator image |
 | 8 | exception-management | **Conformist** on exception-management's side | consumes `StorageJobFailed`; reason `EQUIPMENT_FAULT` opens a case | published; the consumer is not wired yet |
 
