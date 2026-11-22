@@ -173,7 +173,7 @@ func problemFromUseCase(ctx context.Context, err error) *problem {
 		return &problem{Type: "storage-job-not-found", Title: "Storage job not found", Status: 404,
 			Detail: "no STORE or RETRIEVE job with that storageJobId exists in that AS/RS"}
 	default:
-		slog.ErrorContext(ctx, "a2a skill failed", "error", err)
+		slog.ErrorContext(ctx, "a2a skill failed", "error", logReplacer.Replace(err.Error()))
 		return &problem{Type: "internal-error", Title: "Internal server error", Status: 500,
 			Detail: "the skill failed; see the server logs (trace id in the response metadata)"}
 	}
