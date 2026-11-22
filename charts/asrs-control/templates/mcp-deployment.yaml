@@ -9,6 +9,9 @@ metadata:
     app.kubernetes.io/component: mcp
   annotations:
     # agents.colocate cutover (ADR 0012): ArgoCD prunes this Deployment only after <release>-agents serves.
+    # On the un-flip (rollback) wave -1 recreates it and waits Healthy before the wave-0 Services switch
+    # back, so the rollback has no 503 window. Deployment-object annotations: syncing them rolls no pod.
+    argocd.argoproj.io/sync-wave: "-1"
     argocd.argoproj.io/sync-options: PruneLast=true
 spec:
   replicas: {{ .Values.mcp.replicaCount }}
