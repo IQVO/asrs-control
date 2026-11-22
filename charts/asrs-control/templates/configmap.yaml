@@ -3,6 +3,10 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "asrs-control.fullname" . }}
+  annotations:
+    # The mcp/a2a (or agents) pods mount layout.yaml and sync at wave -1: this ConfigMap must land first,
+    # or a layout change rolls those pods on the old file (harness template agents.colocate README).
+    argocd.argoproj.io/sync-wave: "-2"
   labels:
     {{- include "asrs-control.labels" . | nindent 4 }}
     app.kubernetes.io/component: api
