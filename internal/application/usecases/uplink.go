@@ -27,7 +27,7 @@ func (s *Service) HandleUp(ctx context.Context, asrsID string, t telegrams.UpTel
 	ackID := s.d.IDs.NewID()
 	if !ok {
 		s.d.Log.WarnContext(ctx, "up telegram matches nothing in this AS/RS; acknowledged and ignored",
-			"asrs", l.ID, "type", t.Type, "telegramId", t.TelegramID)
+			"asrs", sanitizeLog(l.ID), "type", sanitizeLog(t.Type), "telegramId", sanitizeLog(t.TelegramID))
 		return s.claimOnly(ctx, l.ID, t.TelegramID, ackID)
 	}
 	err = s.inAisle(ctx, l, n, func(ctx context.Context, a *aisle) error {
@@ -95,11 +95,11 @@ func (a *aisle) jobDone(ctx context.Context, t telegrams.UpTelegram) error {
 		return err
 	}
 	if !j.Open() || !j.InFlight() { // a duplicate or late JOB_DONE (ended job), or a stray one
-		a.s.d.Log.WarnContext(ctx, "JOB_DONE for a job that is not with the PLC; ignored", "job", j.ID(), "status", j.Status())
+		a.s.d.Log.WarnContext(ctx, "JOB_DONE for a job that is not with the PLC; ignored", "job", j.ID(), "status", sanitizeLog(string(j.Status())))
 		return nil
 	}
 	if err := a.applyMotion(ctx, j); err != nil {
-		a.s.d.Log.ErrorContext(ctx, "the storage map disagrees with the PLC's JOB_DONE", "job", j.ID(), "error", err)
+		a.s.d.Log.ErrorContext(ctx, "the storage map disagrees with the PLC's JOB_DONE", "job", j.ID(), "error", sanitizeErr(err))
 		return a.fail(ctx, j, storagejob.Failure{Reason: storagejob.ReasonStorageMapMismatch, At: a.now, PLCTime: t.Timestamp})
 	}
 	evs, err := j.CompleteMotion(a.now, t.Timestamp)
@@ -120,7 +120,7 @@ func (a *aisle) applyMotion(ctx context.Context, j *storagejob.Job) error {
 	default:
 		replaced, err := a.m.CompleteRetrieve(j.ContainerID(), j.From(), j.PortID())
 		if replaced != "" {
-			a.s.d.Log.WarnContext(ctx, "presented over a container whose pickup was never confirmed", "port", j.PortID(), "replaced", replaced)
+			a.s.d.Log.WarnContext(ctx, "presented over a container whose pickup was never confirmed", "port", sanitizeLog(j.PortID()), "replaced", sanitizeLog(replaced))
 		}
 		return err
 	}
@@ -132,7 +132,7 @@ func (a *aisle) jobFailed(ctx context.Context, t telegrams.UpTelegram) error {
 		return err
 	}
 	if !j.Open() || !j.InFlight() { // ended (duplicate or late), or not with the PLC (stray)
-		a.s.d.Log.WarnContext(ctx, "JOB_FAILED for a job that is not with the PLC; ignored", "job", j.ID(), "status", j.Status())
+		a.s.d.Log.WarnContext(ctx, "JOB_FAILED for a job that is not with the PLC; ignored", "job", j.ID(), "status", sanitizeLog(string(j.Status())))
 		return nil
 	}
 	return a.fail(ctx, j, storagejob.Failure{Reason: storagejob.ReasonForPLC(t.Reason), PLCReason: t.Reason, At: a.now, PLCTime: t.Timestamp})
@@ -141,7 +141,7 @@ func (a *aisle) jobFailed(ctx context.Context, t telegrams.UpTelegram) error {
 func (a *aisle) unitState(ctx context.Context, t telegrams.UpTelegram) error {
 	st, err := equipment.ParseState(t.State)
 	if err != nil {
-		a.s.d.Log.WarnContext(ctx, "UNIT_STATE with an unknown state; ignored", "unit", t.UnitID, "error", err)
+		a.s.d.Log.WarnContext(ctx, "UNIT_STATE with an unknown state; ignored", "unit", sanitizeLog(t.UnitID), "error", sanitizeErr(err))
 		return nil
 	}
 	ev, changed := a.u.Report(st, a.now, t.Timestamp)
@@ -183,7 +183,7 @@ func (a *aisle) failQueued(ctx context.Context, plcTime time.Time) error {
 func (a *aisle) portArrival(ctx context.Context, t telegrams.UpTelegram) error {
 	j, err := a.s.d.Jobs.OldestAwaiting(ctx, a.l.ID, t.PortID)
 	if errors.Is(err, ports.ErrJobNotFound) {
-		a.s.d.Log.WarnContext(ctx, "PORT_ARRIVAL with no retrieve awaiting it; ignored", "port", t.PortID)
+		a.s.d.Log.WarnContext(ctx, "PORT_ARRIVAL with no retrieve awaiting it; ignored", "port", sanitizeLog(t.PortID))
 		return nil
 	}
 	if err != nil {
