@@ -62,8 +62,8 @@ mcp:
   route:
     enabled: true
     parentRefs:
-      - name: warehouse-gateway
-        namespace: kong
+      - name: agent-router
+        namespace: envoy-gateway-system
         sectionName: http
   extraEnv:
     - name: GOMAXPROCS
@@ -73,8 +73,8 @@ a2a:
   route:
     enabled: true
     parentRefs:
-      - name: warehouse-gateway
-        namespace: kong
+      - name: agent-router
+        namespace: envoy-gateway-system
         sectionName: http
   agentUrl: "http://asrs-control-a2a.warehouse-systems.svc.cluster.local:8093/"
 extraEnv:
