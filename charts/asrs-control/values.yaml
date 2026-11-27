@@ -133,11 +133,15 @@ mcp:
     type: ClusterIP
     port: 8090
     targetPort: 8090
-  # Kong exposure: /api/mcp/asrs-control -> Service :8090, prefix rewritten to /mcp. Needs the Gateway parentRef of
+  # Agent Router exposure: /api/mcp/asrs-control -> Service :8090, prefix rewritten to /mcp. Needs the Gateway parentRef of
   # the environment that deploys the chart.
   route:
     enabled: false
     path: "/api/mcp/asrs-control"
+    # Route timeout (HTTPRoute rule timeouts.request). "0s" disables it: Envoy's 15s
+    # default would cut MCP Streamable HTTP responses that stream over SSE.
+    timeouts:
+      request: "0s"
     parentRefs:
       - name: ""
         namespace: ""
@@ -159,10 +163,14 @@ a2a:
     type: ClusterIP
     port: 8093
     targetPort: 8093
-  # Kong exposure: /api/a2a/asrs-control -> Service :8093, prefix rewritten to /. Needs the Gateway parentRef.
+  # Agent Router exposure: /api/a2a/asrs-control -> Service :8093, prefix rewritten to /. Needs the Gateway parentRef.
   route:
     enabled: false
     path: "/api/a2a/asrs-control"
+    # Route timeout (HTTPRoute rule timeouts.request). "0s" disables it: Envoy's 15s
+    # default would cut long A2A calls and streamed (SSE) responses.
+    timeouts:
+      request: "0s"
     parentRefs:
       - name: ""
         namespace: ""
